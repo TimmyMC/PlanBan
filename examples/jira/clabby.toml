@@ -50,3 +50,24 @@ cmd = "echo ran agent for {{ issue_key }}"
 [[cron]]
 schedule = "0 */15 * * * *"   # every 15 minutes: keep the overview fresh
 action = "sync"
+
+# --- Workflow transitions (Milestone 2) -------------------------------------
+# Dragging a card across a column boundary runs these steps under gate-with-
+# override. Required steps that fail block the move until fixed or overridden.
+
+[[transitions]]
+from = "In Progress"
+to = "In Review"
+steps = [
+    # In real use: open the Azure DevOps PR, then transition Jira.
+    { id = "open_pr",  cmd = "echo az repos pr create --source feature/{{ key }}", required = true },
+    { id = "jira",     cmd = "node ../tracker.mjs issues.json transition {{ key }} \"{{ to }}\"", required = true },
+    { id = "notify",   cmd = "echo {{ key }} ready for review", required = false },
+]
+
+[[transitions]]
+from = "In Review"
+to = "Done"
+steps = [
+    { id = "jira", cmd = "node ../tracker.mjs issues.json transition {{ key }} \"{{ to }}\"", required = true },
+]

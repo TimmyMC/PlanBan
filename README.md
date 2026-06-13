@@ -10,7 +10,7 @@ Clabby is **not** an autonomous agent runner. It enforces your workflow; you do 
 thinking. See [`CONSTITUTION.md`](./CONSTITUTION.md) for the principles that govern
 every change.
 
-## Status: Milestone 1 (headless command center)
+## Status: Milestones 1–2 (headless command center + workflow engine)
 
 Working today, fully headless via the CLI:
 
@@ -22,6 +22,12 @@ Working today, fully headless via the CLI:
 - **Worktrees** — create per-issue git worktrees and surface their live git state.
 - **Overview** — `clabby status` joins issues × sessions × git state into one view.
 - **Cron** — keep the overview fresh on a schedule.
+- **Deterministic transitions (M2)** — `clabby move <issue> <status>` runs that
+  transition's configured steps in order under **gate-with-override**: a required step
+  that fails blocks the move (the issue stays put, nothing downstream runs) until you
+  fix it or `clabby override <issue> --reason "…"` — which records the reason to an
+  audit trail and resumes. Steps are command templates or agent runs; `when` guards and
+  best-effort hooks are supported.
 
 Everything external is a **command template** — no tracker, VCS host, or agent is
 hardcoded (Constitution §5, §11). The engine (`clabby-core`) has no UI dependency;
@@ -68,6 +74,8 @@ clabby worktree add <KEY> [--branch B]    Create a per-issue git worktree
 clabby worktree list                      List recorded worktrees
 clabby logs tail <SESSION_ID>             Recent log lines for a session
 clabby cron run [--once]                  Run scheduled jobs (or each once)
+clabby move <KEY> <STATUS>                Run a gated transition to a new status
+clabby override <KEY> --reason "…"        Override a blocked step (audited) + resume
 ```
 
 Config is discovered as `clabby.toml` from the current directory upward, or passed
@@ -127,10 +135,11 @@ executes it in Docker.)
 
 ## Roadmap
 
-- **M2 — deterministic workflow engine:** column transitions run ordered
-  command-template steps with **gate-with-override** (a required step failure blocks
-  the transition; overrides require a logged reason — the regulatory audit trail).
+- ✅ **M1 — headless command center** (sync, sessions, worktrees, overview, cron).
+- ✅ **M2 — deterministic workflow engine:** gated `move`/`override` with an audit trail.
 - **M3 — Tauri + React board:** drag-to-transition, live session panels, with
   comprehensive Playwright end-to-end coverage.
 - **Future — `clabby init --from-jira`:** bootstrap config from a live instance's
   custom statuses and labels.
+
+See [`BACKLOG.md`](./BACKLOG.md) for consciously deferred work.
