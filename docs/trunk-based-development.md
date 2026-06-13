@@ -16,13 +16,19 @@ gh pr create --fill               # or open the PR in the browser
 ```
 
 From there it's hands-off: CI runs on the PR, and `.github/workflows/automerge.yml`
-turns on GitHub's native auto-merge. When all required checks go green the PR is
-**squash-merged into trunk and its branch deleted**. If a check fails, the PR just
-sits until you push a fix.
+**waits for the whole CI workflow to succeed, then squash-merges the PR and deletes
+the branch**. If any job fails, the PR just sits until you push a fix.
+
+> **Why gate on the CI workflow, not GitHub "auto-merge"?** GitHub's native
+> auto-merge only waits for checks that *branch protection* lists as required — so
+> if protection isn't set up (or is set up after the fact), a PR can merge *before
+> checks finish*. The auto-merge workflow instead triggers on `workflow_run` of CI
+> completing `success`, so by the time it runs, all four jobs below are already
+> green. No dependency on settings being configured in the right order.
 
 ## What gates a merge
 
-Required status checks (enforced by branch protection on `trunk`):
+The auto-merge job starts only after **every** CI job passes:
 
 | Check (CI job name)       | What it enforces                                            |
 | ------------------------- | ---------------------------------------------------------- |
@@ -40,26 +46,27 @@ The coverage bar is **75% line coverage**, measured across the workspace by
 small buffer for churn. Raise it as coverage improves — bump `--fail-under-lines`
 in `.github/workflows/ci.yml` and update the table above.
 
-## One-time setup (repo settings)
+## One-time setup (recommended, but not required for the wait)
 
-Branch protection and the "allow auto-merge" toggle are GitHub *settings*, not
-files in the repo, so they aren't applied by cloning. Set them up once:
+The auto-merge workflow above is self-contained — it needs no repo settings to
+gate correctly. Branch protection is still worth adding as a **second layer** that
+blocks direct pushes to `trunk` and requires the checks at the GitHub level. It's a
+*setting*, not a file, so it isn't applied by cloning:
 
 ```sh
 gh auth login                      # if not already authenticated
 ./scripts/setup-branch-protection.sh   # idempotent; defaults to TimmyMC/PlanBan
 ```
 
-That script enables auto-merge (squash-only, auto-delete merged branches) and
-protects `trunk` with the three required checks above. Prefer clicking? In the
-GitHub UI: **Settings → General → Pull Requests** → enable *Allow auto-merge* and
-*Automatically delete head branches*; then **Settings → Branches → Add rule** for
-`trunk` → require pull requests and require the three status checks (strict).
+Prefer clicking? **Settings → Branches → Add rule** for `trunk` → require pull
+requests and require the four status checks (strict). `enforce_admins` is left off,
+so you can still push a direct hotfix to `trunk` in a pinch.
 
-`enforce_admins` is left off, so you can still push a direct hotfix to `trunk` in a
-pinch; day to day, go through a PR.
+Do **not** also enable GitHub's native "Allow auto-merge" and click *Enable
+auto-merge* on a PR before protection lists the required checks — that path merges
+immediately. The workflow is the gate; let it do the merging.
 
 ## Dependabot
 
-Dependabot PRs are auto-enabled for merge too, so routine dependency bumps merge
-themselves once green. The bumps still face the exact same gates as any other PR.
+Dependabot PRs merge themselves once green too, facing the exact same CI gates as
+any other PR.

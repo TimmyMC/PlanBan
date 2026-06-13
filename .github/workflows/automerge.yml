@@ -1,33 +1,53 @@
 name: Auto-merge
 
-# Trunk-based development: short-lived branches open a PR into `trunk`, and the
-# PR merges itself once every required check passes. This workflow only *enables*
-# GitHub's native auto-merge — branch protection on `trunk` is what actually
-# enforces "all checks green (incl. coverage) before merge". See
-# docs/trunk-based-development.md and scripts/setup-branch-protection.sh.
+# Trunk-based development: a PR into `trunk` merges itself once CI passes.
+#
+# This triggers on the *CI workflow completing successfully* rather than
+# enabling GitHub's native auto-merge. That distinction matters: native
+# auto-merge only waits for checks when branch protection lists them as
+# required, so if protection isn't configured (or configured later) a PR can
+# merge *before checks finish*. Gating on `workflow_run` of CI means every job
+# in CI — check, coverage, build·e2e, tauri shell — must already be green
+# before this job can even start. No ordering footgun, no settings dependency.
+#
+# Branch protection (scripts/setup-branch-protection.sh) is still recommended
+# as a second layer that blocks direct pushes to trunk.
 
 on:
-  pull_request:
-    types: [opened, reopened, ready_for_review, synchronize]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  enable-auto-merge:
-    name: enable auto-merge
+  merge:
+    name: merge passing PR
     runs-on: ubuntu-latest
-    # Don't queue drafts, and only auto-enable for trusted authors: the repo
-    # owner's own branches and Dependabot. Outside PRs still merge — a human
-    # just enables auto-merge (or merges) manually after review.
+    # Act only when CI fully succeeded AND that CI run was for a pull request
+    # (CI also runs on direct pushes to trunk — ignore those here).
     if: >
-      github.event.pull_request.draft == false &&
-      (github.actor == github.repository_owner || github.actor == 'dependabot[bot]')
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
     steps:
-      - name: Enable auto-merge (squash)
-        run: gh pr merge --auto --squash "$PR"
+      - name: Squash-merge the PR this CI run validated
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          # The PR whose head is exactly the commit CI just validated. Restrict
+          # to non-draft PRs authored by the owner or Dependabot; anything else
+          # waits for a human to merge. Empty result => nothing to do.
+          pr=$(gh pr list --state open --limit 100 \
+                 --json number,headRefOid,isDraft,author \
+                 --jq "[.[] | select(.headRefOid==\"$SHA\" and .isDraft==false and (.author.login==\"$OWNER\" or .author.login==\"dependabot[bot]\"))][0].number")
+          if [ -z "$pr" ]; then
+            echo "No matching open PR for $SHA; nothing to merge."
+            exit 0
+          fi
+          echo "CI green for PR #$pr (head $SHA) — squash-merging."
+          gh pr merge "$pr" --squash --delete-branch
