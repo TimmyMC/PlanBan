@@ -10,6 +10,13 @@ Clabby is **not** an autonomous agent runner. It enforces your workflow; you do 
 thinking. See [`CONSTITUTION.md`](./CONSTITUTION.md) for the principles that govern
 every change.
 
+![The Clabby board — Tauri + React (M3)](docs/board.png)
+
+> The board: columns are tracker statuses; each card surfaces the issue's live
+> session, git, and worktree state, and an out-of-band tracker change is flagged as
+> **diverged**. Shown with the offline demo data — regenerate with
+> `pnpm --dir ui screenshot`.
+
 ## Status: Milestones 1–2 (headless command center + workflow engine)
 
 Working today, fully headless via the CLI:
@@ -111,12 +118,18 @@ script; worktree tests use git).
 
 ## CI and local checks
 
-CI (`.github/workflows/ci.yml`) runs three gates: `cargo fmt --check`, `cargo clippy
---workspace --all-targets -- -D warnings`, and `cargo test`. Lints follow the default +
-`clippy::all` set with documentation/style nags allowed (see the crate roots) — strict
-enough to catch real issues without taxing velocity.
+CI (`.github/workflows/ci.yml`) runs four gates on every PR and push:
 
-You can run the **exact same gate locally** before pushing:
+- **`fmt · clippy · test`** — `cargo fmt --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, and `cargo test --workspace`.
+- **`coverage`** — `cargo llvm-cov --workspace --fail-under-lines 75`.
+- **`build · e2e`** — the frontend `tsc`/`vite` build, Biome lint, and the Playwright
+  board suite.
+- **`tauri shell`** — compiles the Tauri desktop shell (kept outside the Cargo
+  workspace) and clippies it.
+
+Lints follow the default + `clippy::all` set with documentation/style nags allowed
+(see the crate roots). Run the Rust gate locally before pushing:
 
 ```sh
 ./scripts/ci.ps1      # Windows / PowerShell
@@ -124,12 +137,15 @@ You can run the **exact same gate locally** before pushing:
 just                  # if you `cargo install just`
 ```
 
-Or have it run automatically on every push (opt-in):
+Enable the auto-format pre-commit hook (runs `cargo fmt` + Biome on staged files so
+formatting never breaks the build):
 
 ```sh
-git config core.hooksPath .githooks
+./scripts/install-hooks.ps1   # or ./scripts/install-hooks.sh
 ```
 
+Development is **trunk-based**: branch, open a PR, and it auto-merges once all four
+checks pass — see [`docs/trunk-based-development.md`](./docs/trunk-based-development.md).
 (For running the real GitHub workflow locally, [`act`](https://github.com/nektos/act)
 executes it in Docker.)
 
@@ -138,8 +154,9 @@ executes it in Docker.)
 - ✅ **M1 — headless command center** (sync, sessions, worktrees, overview, cron).
 - ✅ **M2 — deterministic workflow engine:** gated `move`/`override`, with override
   reasons logged for debugging.
-- **M3 — Tauri + React board:** drag-to-transition, live session panels, with
-  comprehensive Playwright end-to-end coverage.
+- 🚧 **M3 — Tauri + React board:** the desktop shell (real-time `EventBus` push) and a
+  dnd-kit board — drag-to-transition, divergence flags, live session/git/worktree
+  badges — under a Playwright suite. CI-gated by the `tauri shell` and `build · e2e` jobs.
 - **Future — `clabby init --from-jira`:** bootstrap config from a live instance's
   custom statuses and labels.
 
