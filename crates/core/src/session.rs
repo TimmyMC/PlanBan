@@ -15,7 +15,7 @@ use chrono::Utc;
 use serde_json::json;
 
 use crate::config::Config;
-use crate::db::Db;
+use crate::db::{Db, NewSession};
 use crate::events::{Event, EventBus};
 use crate::model::{Session, SessionKind, SessionStatus};
 use crate::{runner, template, Error, Result};
@@ -67,16 +67,16 @@ pub async fn run_managed(
     let mut streaming = runner::spawn_streaming(&cmd_line, cwd.as_deref(), &env)?;
 
     let session = db
-        .insert_session(
+        .insert_session(NewSession {
             issue_key,
-            SessionKind::Managed,
-            streaming.pid.map(|p| p as i64),
-            wt_path.as_deref(),
-            branch.as_deref(),
-            Some(agent_name),
-            SessionStatus::Running,
-            None,
-        )
+            kind: SessionKind::Managed,
+            pid: streaming.pid.map(i64::from),
+            worktree_path: wt_path.as_deref(),
+            branch: branch.as_deref(),
+            agent: Some(agent_name),
+            status: SessionStatus::Running,
+            log_path: None,
+        })
         .await?;
 
     bus.publish(Event::SessionStatus {
@@ -124,15 +124,15 @@ pub async fn attach(
     branch: Option<&str>,
     log_path: Option<&str>,
 ) -> Result<Session> {
-    db.insert_session(
+    db.insert_session(NewSession {
         issue_key,
-        SessionKind::External,
-        None,
-        Some(worktree_path),
+        kind: SessionKind::External,
+        pid: None,
+        worktree_path: Some(worktree_path),
         branch,
-        None,
-        SessionStatus::Running,
+        agent: None,
+        status: SessionStatus::Running,
         log_path,
-    )
+    })
     .await
 }

@@ -90,10 +90,21 @@ pub struct Db {
     pool: SqlitePool,
 }
 
+/// Parameters for [`Db::insert_session`], grouped so the call site reads as named
+/// fields instead of a row of positional arguments.
+pub struct NewSession<'a> {
+    pub issue_key: &'a str,
+    pub kind: SessionKind,
+    pub pid: Option<i64>,
+    pub worktree_path: Option<&'a str>,
+    pub branch: Option<&'a str>,
+    pub agent: Option<&'a str>,
+    pub status: SessionStatus,
+    pub log_path: Option<&'a str>,
+}
+
 fn parse_ts(s: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|d| d.with_timezone(&Utc))
-        .unwrap_or_else(|_| Utc::now())
+    DateTime::parse_from_rfc3339(s).map_or_else(|_| Utc::now(), |d| d.with_timezone(&Utc))
 }
 
 fn parse_ts_opt(s: Option<String>) -> Option<DateTime<Utc>> {
@@ -173,7 +184,7 @@ impl Db {
         .bind(&issue.assignee)
         .bind(&issue.local_status)
         .bind(&issue.last_pushed_status)
-        .bind(issue.diverged as i64)
+        .bind(i64::from(issue.diverged))
         .bind(&issue.url)
         .bind(labels)
         .bind(issue.last_synced.map(|d| d.to_rfc3339()))
@@ -198,18 +209,7 @@ impl Db {
 
     // ---- sessions -----------------------------------------------------------
 
-    #[allow(clippy::too_many_arguments)]
-    pub async fn insert_session(
-        &self,
-        issue_key: &str,
-        kind: SessionKind,
-        pid: Option<i64>,
-        worktree_path: Option<&str>,
-        branch: Option<&str>,
-        agent: Option<&str>,
-        status: SessionStatus,
-        log_path: Option<&str>,
-    ) -> Result<Session> {
+    pub async fn insert_session(&self, new: NewSession<'_>) -> Result<Session> {
         let now = Utc::now().to_rfc3339();
         let row = sqlx::query(
             r#"INSERT INTO sessions
@@ -218,14 +218,14 @@ impl Db {
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
                RETURNING *"#,
         )
-        .bind(issue_key)
-        .bind(kind.as_str())
-        .bind(pid)
-        .bind(worktree_path)
-        .bind(branch)
-        .bind(agent)
-        .bind(status.as_str())
-        .bind(log_path)
+        .bind(new.issue_key)
+        .bind(new.kind.as_str())
+        .bind(new.pid)
+        .bind(new.worktree_path)
+        .bind(new.branch)
+        .bind(new.agent)
+        .bind(new.status.as_str())
+        .bind(new.log_path)
         .bind(&now)
         .bind(&now)
         .fetch_one(&self.pool)
@@ -364,7 +364,7 @@ impl Db {
         sqlx::query("INSERT INTO cron_runs (action, ts, ok, detail) VALUES (?, ?, ?, ?)")
             .bind(action)
             .bind(Utc::now().to_rfc3339())
-            .bind(ok as i64)
+            .bind(i64::from(ok))
             .bind(detail)
             .execute(&self.pool)
             .await?;

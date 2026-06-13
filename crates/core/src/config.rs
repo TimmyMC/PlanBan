@@ -112,8 +112,7 @@ impl Config {
         let mut cfg: Config = toml::from_str(&text)?;
         cfg.root_dir = path
             .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."));
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
         cfg.validate()?;
         Ok(cfg)
     }
