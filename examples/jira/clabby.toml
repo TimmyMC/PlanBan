@@ -1,0 +1,52 @@
+# Example workflow: a Jira-style tracker.
+# Everything Clabby does here is defined in THIS file — no Jira knowledge lives in
+# the engine (Constitution §5, §11). Swap the commands and map for your real
+# `acli`/`jira`/`az` CLIs and this becomes your production config.
+
+[project]
+name = "Acme / Jira"
+db_path = ".clabby/clabby.db"
+worktrees_dir = "../worktrees"
+
+[tracker]
+# Offline demo uses the fake tracker; replace with e.g.:
+#   fetch = "acli jira workitem search --jql \"{{ jql }}\" --json"
+fetch = "node ../tracker.mjs issues.json fetch"
+push  = "node ../tracker.mjs issues.json transition {{ key }} \"{{ status }}\""
+jql   = "assignee = currentUser() AND statusCategory != Done"
+
+# How to read issues out of the fetch JSON (Jira's nested shape).
+[tracker.map]
+items    = "issues"
+key      = "key"
+summary  = "fields.summary"
+status   = "fields.status.name"
+assignee = "fields.assignee.displayName"
+url      = "self"
+labels   = "fields.labels"
+
+[[states]]
+name = "To Do"
+category = "todo"
+[[states]]
+name = "In Progress"
+category = "in-progress"
+[[states]]
+name = "In Review"
+category = "in-progress"
+[[states]]
+name = "Done"
+category = "done"
+
+# Your real interactive harness (Milestone-2 transitions will spawn this).
+[agents.claude]
+cmd = "claude -p \"{{ prompt }}\""
+cwd = "{{ worktree_path }}"
+
+# A trivial agent so `clabby session spawn` works offline in demos.
+[agents.echo]
+cmd = "echo ran agent for {{ issue_key }}"
+
+[[cron]]
+schedule = "0 */15 * * * *"   # every 15 minutes: keep the overview fresh
+action = "sync"

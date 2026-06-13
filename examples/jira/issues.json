@@ -1,0 +1,34 @@
+{
+  "issues": [
+    {
+      "key": "PROJ-12",
+      "self": "http://jira.local/PROJ-12",
+      "fields": {
+        "summary": "Implement tracker sync",
+        "status": { "name": "In Progress" },
+        "assignee": { "displayName": "You" },
+        "labels": ["backend"]
+      }
+    },
+    {
+      "key": "PROJ-31",
+      "self": "http://jira.local/PROJ-31",
+      "fields": {
+        "summary": "Review the worktree PR",
+        "status": { "name": "In Review" },
+        "assignee": { "displayName": "You" },
+        "labels": []
+      }
+    },
+    {
+      "key": "PROJ-44",
+      "self": "http://jira.local/PROJ-44",
+      "fields": {
+        "summary": "Fix flaky integration test",
+        "status": { "name": "In Progress" },
+        "assignee": { "displayName": "You" },
+        "labels": ["ci"]
+      }
+    }
+  ]
+}

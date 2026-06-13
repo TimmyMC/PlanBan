@@ -1,0 +1,46 @@
+# Example workflow: a GitHub-Issues-style tracker.
+#
+# This file exists to PROVE Constitution §11: the engine is unchanged from the
+# Jira example. Only this config differs — a different JSON shape (top-level
+# array, flat `state`, label objects), a different query, a different agent.
+# If Clabby needed a code change to support this, §11 would be violated.
+
+[project]
+name = "OSS / GitHub Issues"
+db_path = ".clabby/clabby.db"
+worktrees_dir = "../worktrees"
+
+[tracker]
+# Replace with e.g.: fetch = "gh issue list --json number,title,state,... "
+fetch = "node ../tracker.mjs issues.json fetch"
+push  = "node ../tracker.mjs issues.json transition {{ key }} \"{{ status }}\""
+jql   = "is:open assignee:@me"
+
+# A completely different response shape than Jira — handled by config alone.
+[tracker.map]
+items    = "$"          # the JSON root IS the array
+key      = "key"
+summary  = "title"
+status   = "state"
+assignee = "user"
+url      = "html_url"
+labels   = "labels"     # array of { "name": ... } objects
+
+[[states]]
+name = "Todo"
+[[states]]
+name = "In Progress"
+[[states]]
+name = "Done"
+
+# A different harness, again config-only.
+[agents.aider]
+cmd = "aider --message \"{{ prompt }}\""
+cwd = "{{ worktree_path }}"
+
+[agents.echo]
+cmd = "echo ran agent for {{ issue_key }}"
+
+[[cron]]
+schedule = "0 */30 * * * *"
+action = "sync"
