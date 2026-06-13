@@ -19,7 +19,7 @@ use clabby_core::events::EventBus;
 use clabby_core::model::{GitState, Session};
 use clabby_core::overview::OverviewRow;
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 // ---- Application state (managed by Tauri, shared across commands) -----------
 

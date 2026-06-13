@@ -1,3 +1,8 @@
+# Standalone workspace root: an empty [workspace] table stops Cargo from
+# walking up and treating this crate as a member of the parent workspace
+# (it intentionally is not — see the note on `publish` below).
+[workspace]
+
 [package]
 name = "clabby-tauri"
 version = "0.1.0"
