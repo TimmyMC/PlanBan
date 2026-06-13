@@ -3,7 +3,7 @@ import type { BoardData, MoveResult, OverviewRow } from "@/types";
 
 const STATUSES = ["To Do", "In Progress", "In Review", "Done"];
 
-let rows: OverviewRow[] = [
+const rows: OverviewRow[] = [
   {
     key: "PROJ-12",
     summary: "Implement tracker sync",
@@ -12,7 +12,13 @@ let rows: OverviewRow[] = [
     diverged: false,
     sessions: [{ id: 1, kind: "managed", status: "running" }],
     worktreePath: "wt/PROJ-12",
-    git: { branch: "feature/PROJ-12", ahead: 3, behind: 0, dirty: true, lastCommitSummary: "wip: sync" },
+    git: {
+      branch: "feature/PROJ-12",
+      ahead: 3,
+      behind: 0,
+      dirty: true,
+      lastCommitSummary: "wip: sync",
+    },
   },
   {
     key: "PROJ-31",
@@ -22,7 +28,13 @@ let rows: OverviewRow[] = [
     diverged: false,
     sessions: [{ id: 2, kind: "external", status: "idle" }],
     worktreePath: "wt/PROJ-31",
-    git: { branch: "feature/PROJ-31", ahead: 0, behind: 0, dirty: false, lastCommitSummary: "ready" },
+    git: {
+      branch: "feature/PROJ-31",
+      ahead: 0,
+      behind: 0,
+      dirty: false,
+      lastCommitSummary: "ready",
+    },
   },
   {
     key: "PROJ-44",
@@ -62,7 +74,10 @@ export const mockApi: Api = {
     if (!row) throw new Error(`no such issue: ${key}`);
     // Demonstrate the gate: In Review -> Done requires an approval that fails.
     if (row.status === "In Review" && to === "Done") {
-      return { completed: false, blocked: { stepId: "require_review", error: "PR is not approved yet" } };
+      return {
+        completed: false,
+        blocked: { stepId: "require_review", error: "PR is not approved yet" },
+      };
     }
     row.status = to;
     row.diverged = false;

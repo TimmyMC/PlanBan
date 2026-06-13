@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 test("renders columns, cards, and the divergence badge", async ({ page }) => {
   await page.goto("/");

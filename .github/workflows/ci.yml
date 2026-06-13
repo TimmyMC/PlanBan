@@ -61,6 +61,9 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
+      - name: Lint · format (Biome)
+        run: pnpm run lint
+
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium
 

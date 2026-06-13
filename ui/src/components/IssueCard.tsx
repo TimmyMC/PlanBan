@@ -1,7 +1,7 @@
 import { useDraggable } from "@dnd-kit/core";
-import type { OverviewRow } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { OverviewRow } from "@/types";
 
 export function IssueCard({ row }: { row: OverviewRow }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({

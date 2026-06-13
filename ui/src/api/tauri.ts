@@ -10,8 +10,7 @@ export const tauriApi = {
 
   sync: (): Promise<{ fetched: number; diverged: number }> => invoke("sync"),
 
-  move: (key: string, to: string): Promise<MoveResult> =>
-    invoke("move_issue", { key, to }),
+  move: (key: string, to: string): Promise<MoveResult> => invoke("move_issue", { key, to }),
 
   override: (key: string, reason: string): Promise<MoveResult> =>
     invoke("override_issue", { key, reason }),

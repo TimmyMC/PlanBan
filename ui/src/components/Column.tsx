@@ -1,7 +1,7 @@
 import { useDroppable } from "@dnd-kit/core";
-import type { OverviewRow } from "@/types";
 import { IssueCard } from "@/components/IssueCard";
 import { cn } from "@/lib/utils";
+import type { OverviewRow } from "@/types";
 
 export function Column({ status, rows }: { status: string; rows: OverviewRow[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });

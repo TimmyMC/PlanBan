@@ -1,6 +1,6 @@
-import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import type { BoardData } from "@/types";
+import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Column } from "@/components/Column";
+import type { BoardData } from "@/types";
 
 export function Board({
   data,

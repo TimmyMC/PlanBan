@@ -9,6 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173 --strictPort",
     "test:e2e": "playwright test",
+    "lint": "biome check .",
+    "format": "biome check --write .",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -20,6 +22,7 @@
     "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.0",
     "@playwright/test": "^1.48.0",
     "@tauri-apps/cli": "^2",
     "@types/react": "^18.3.11",
