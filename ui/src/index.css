@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 222 47% 11%;
+  --foreground: 210 40% 98%;
+  --card: 222 40% 16%;
+  --muted: 217 33% 22%;
+  --muted-foreground: 215 20% 65%;
+  --border: 217 33% 26%;
+  --primary: 210 40% 96%;
+  --primary-foreground: 222 47% 11%;
+  --destructive: 0 72% 58%;
+  --accent: 199 89% 55%;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  @apply bg-background text-foreground;
+}
