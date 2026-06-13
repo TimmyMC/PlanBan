@@ -1,0 +1,28 @@
+# Rust
+/target
+**/*.rs.bk
+*.pdb
+
+# Clabby local state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-*
+/.clabby/
+
+# Clabby local runtime state (anywhere, incl. example dirs)
+.clabby/
+
+# Local config overrides
+clabby.local.toml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Node / UI (later milestone)
+node_modules/
+dist/

@@ -1,0 +1,20 @@
+[package]
+name = "clabby"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "clabby"
+path = "src/main.rs"
+
+[dependencies]
+clabby-core = { path = "../core" }
+tokio = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio-cron-scheduler = "0.13"
+serde_json = { workspace = true }
+chrono = { workspace = true }
