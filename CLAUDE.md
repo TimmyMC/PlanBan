@@ -34,6 +34,11 @@ The pre-commit hook (`scripts/hooks/pre-commit`, enabled via `core.hooksPath`) r
 `cargo fmt` on staged Rust files and Biome `check --write` on staged frontend files,
 re-staging anything it reformats — so the CI fmt/lint gates never fail on formatting alone.
 
+**Trunk-based development.** `trunk` is the protected default branch — don't push to it
+directly. Branch off, open a PR, and it auto-merges once CI is green (fmt/clippy/test,
+≥75% line coverage via `cargo llvm-cov`, frontend build/lint/e2e). See
+[`docs/trunk-based-development.md`](docs/trunk-based-development.md).
+
 Lints: crate roots set `#![warn(clippy::all)]` with the doc/style nags allowed; CI runs
 `clippy -D warnings`. Don't enable `clippy::pedantic` broadly — it's high-noise; the
 allows in `lib.rs`/`main.rs` keep it opt-in if individual pedantic lints are wanted later.

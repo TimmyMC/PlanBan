@@ -1,0 +1,33 @@
+name: Auto-merge
+
+# Trunk-based development: short-lived branches open a PR into `trunk`, and the
+# PR merges itself once every required check passes. This workflow only *enables*
+# GitHub's native auto-merge — branch protection on `trunk` is what actually
+# enforces "all checks green (incl. coverage) before merge". See
+# docs/trunk-based-development.md and scripts/setup-branch-protection.sh.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    name: enable auto-merge
+    runs-on: ubuntu-latest
+    # Don't queue drafts, and only auto-enable for trusted authors: the repo
+    # owner's own branches and Dependabot. Outside PRs still merge — a human
+    # just enables auto-merge (or merges) manually after review.
+    if: >
+      github.event.pull_request.draft == false &&
+      (github.actor == github.repository_owner || github.actor == 'dependabot[bot]')
+    steps:
+      - name: Enable auto-merge (squash)
+        run: gh pr merge --auto --squash "$PR"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}

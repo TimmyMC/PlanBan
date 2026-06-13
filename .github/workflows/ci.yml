@@ -38,6 +38,33 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
+  coverage:
+    name: coverage (>=75% lines)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (+ llvm-tools)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Set up Node (offline fake tracker in the black-box tests)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Gate: line coverage must stay at/above the bar. Local baseline at the
+      # time this gate landed was ~79%; 75% leaves a small buffer for churn.
+      - name: Coverage (fail under 75% lines)
+        run: cargo llvm-cov --workspace --fail-under-lines 75
+
   frontend:
     name: build · e2e
     runs-on: windows-latest
