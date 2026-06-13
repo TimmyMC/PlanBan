@@ -1,0 +1,10 @@
+#!/bin/sh
+# Opt-in pre-push gate. Enable once with:
+#   git config core.hooksPath .githooks
+# Runs the same checks as CI so a red push never reaches the remote (Article 12).
+set -e
+echo "pre-push: running local CI..."
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+echo "pre-push: OK"

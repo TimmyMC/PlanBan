@@ -101,6 +101,30 @@ script; worktree tests use git).
 [`assert_cmd`]: https://docs.rs/assert_cmd
 [`assert_fs`]: https://docs.rs/assert_fs
 
+## CI and local checks
+
+CI (`.github/workflows/ci.yml`) runs three gates: `cargo fmt --check`, `cargo clippy
+--workspace --all-targets -- -D warnings`, and `cargo test`. Lints follow the default +
+`clippy::all` set with documentation/style nags allowed (see the crate roots) — strict
+enough to catch real issues without taxing velocity.
+
+You can run the **exact same gate locally** before pushing:
+
+```sh
+./scripts/ci.ps1      # Windows / PowerShell
+./scripts/ci.sh       # bash
+just                  # if you `cargo install just`
+```
+
+Or have it run automatically on every push (opt-in):
+
+```sh
+git config core.hooksPath .githooks
+```
+
+(For running the real GitHub workflow locally, [`act`](https://github.com/nektos/act)
+executes it in Docker.)
+
 ## Roadmap
 
 - **M2 — deterministic workflow engine:** column transitions run ordered
