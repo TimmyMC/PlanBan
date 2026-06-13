@@ -65,6 +65,14 @@ touching no Rust?* If a workflow assumption leaks into the engine, that's the bu
 Extensibility and configurability are first-class design constraints — new step types,
 integrations, and triggers must be addable without forking core.
 
+### 12. Trunk-based development
+Work integrates into a single trunk (`master`) continuously. Branches are short-lived
+(hours to a day) and merge back fast; long-lived feature branches are not allowed — they
+defeat the rapid feedback loops of §8 and let drift accumulate against §11. The trunk is
+always releasable: every commit keeps the build green and the tests passing (§9).
+Incomplete work ships behind config/flags (§5) rather than lingering on a branch. Commit
+in small, coherent increments so the history itself tells the story.
+
 ---
 
 ## How to use this document
