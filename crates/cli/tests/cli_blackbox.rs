@@ -194,6 +194,90 @@ fn worktree_add_then_list() {
         .stdout(predicate::str::contains("PROJ-12"));
 }
 
+// ---- M2: transitions (gate-with-override) -----------------------------------
+
+#[test]
+fn transition_with_passing_steps_completes() {
+    let tmp = project();
+    clabby()
+        .current_dir(tmp.path())
+        .arg("sync")
+        .assert()
+        .success();
+    clabby()
+        .current_dir(tmp.path())
+        .args(["move", "PROJ-12", "In Review"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Moved PROJ-12"));
+}
+
+#[test]
+fn illegal_transition_is_rejected() {
+    let tmp = project();
+    clabby()
+        .current_dir(tmp.path())
+        .arg("sync")
+        .assert()
+        .success();
+    // No "In Progress" -> "Done" transition is configured.
+    clabby()
+        .current_dir(tmp.path())
+        .args(["move", "PROJ-12", "Done"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no transition"));
+}
+
+#[test]
+fn required_step_gates_then_override_resumes() {
+    let tmp = project();
+    clabby()
+        .current_dir(tmp.path())
+        .arg("sync")
+        .assert()
+        .success();
+
+    // PROJ-31 starts "In Review"; the In Review -> Done transition has a failing
+    // required step, so the move is gated (exit 1) and the issue stays put.
+    clabby()
+        .current_dir(tmp.path())
+        .args(["move", "PROJ-31", "Done"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("BLOCKED").and(predicate::str::contains("gate")));
+
+    clabby()
+        .current_dir(tmp.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("PROJ-31").and(predicate::str::contains("In Review")));
+
+    // Overriding with a reason records the audit entry and resumes to completion.
+    clabby()
+        .current_dir(tmp.path())
+        .args([
+            "override",
+            "PROJ-31",
+            "--reason",
+            "tracker CLI offline; verified the move by hand",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("Override recorded")
+                .and(predicate::str::contains("Moved PROJ-31")),
+        );
+
+    clabby()
+        .current_dir(tmp.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Done"));
+}
+
 // ---- helpers ----------------------------------------------------------------
 
 fn init_git(dir: &Path) {

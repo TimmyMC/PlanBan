@@ -20,6 +20,8 @@ Commands:
   worktree  Worktree operations
   logs      Session log inspection
   cron      Cron scheduler for configured [[cron]] jobs
+  move      Move an issue to a new status, running the transition's steps (gated)
+  override  Override the blocked step of an issue's transition (records a reason)
   help      Print this message or the help of the given subcommand(s)
 
 Options:

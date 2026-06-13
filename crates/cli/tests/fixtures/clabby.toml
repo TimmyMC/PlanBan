@@ -20,3 +20,20 @@ cmd = "echo ran agent for {{ issue_key }}"
 [[cron]]
 schedule = "0 0 * * * *"
 action = "sync"
+
+# A transition whose steps all pass.
+[[transitions]]
+from = "In Progress"
+to = "In Review"
+steps = [
+    { id = "announce", cmd = "echo moving {{ key }} to {{ to }}" },
+]
+
+# A transition with a required step that fails, to exercise the gate + override.
+[[transitions]]
+from = "In Review"
+to = "Done"
+steps = [
+    { id = "announce", cmd = "echo finalizing {{ key }}" },
+    { id = "gate", cmd = "node -e \"process.exit(1)\"", required = true },
+]
