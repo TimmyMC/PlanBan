@@ -200,13 +200,9 @@ async fn override_issue(
 fn start_event_forwarding(app: AppHandle, bus: &EventBus) {
     let mut rx = bus.subscribe();
     tauri::async_runtime::spawn(async move {
-        loop {
-            match rx.recv().await {
-                Ok(event) => {
-                    let _ = app.emit("clabby://event", &event);
-                }
-                Err(_) => break, // channel closed — app is shutting down
-            }
+        // Forward until the channel closes (app shutting down) or errors.
+        while let Ok(event) = rx.recv().await {
+            let _ = app.emit("clabby://event", &event);
         }
     });
 }

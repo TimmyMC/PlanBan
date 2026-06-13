@@ -6,7 +6,7 @@ members = ["crates/core", "crates/cli"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/zlyza/clabby"
+repository = "https://github.com/TimmyMC/PlanBan"
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "sync", "time", "fs", "signal"] }

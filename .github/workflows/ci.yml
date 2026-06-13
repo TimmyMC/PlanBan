@@ -96,3 +96,44 @@ jobs:
 
       - name: E2E tests
         run: pnpm run test:e2e
+
+  tauri:
+    name: tauri shell
+    # src-tauri is intentionally OUTSIDE the cargo workspace (WebView2 system
+    # deps), so the workspace `check`/`coverage` jobs never touch it. This job
+    # is what actually gates the desktop shell: it must compile + pass clippy.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      # generate_context! embeds ui/dist at compile time, so the frontend
+      # must be built before the shell will compile.
+      - name: Build frontend (embedded by the shell)
+        working-directory: ui
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
