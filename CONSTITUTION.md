@@ -49,8 +49,22 @@ The system must be verifiable in seconds, headless, without the GUI. Slow or GUI
 verification is a defect.
 
 ### 9. Regressions are guarded by tests, not vigilance
-Core logic has comprehensive unit/integration coverage; the UI has end-to-end tests.
-Untested behavior is considered broken.
+Untested behavior is considered broken. The strategy is layered:
+
+- **Black-box first.** Every user-facing use case has a test that drives the *compiled
+  binary* — args/stdin in, exit code + stdout/stderr out — knowing nothing about the
+  internals. These tests double as documentation and must read as usage examples.
+  Realized with the assert-rs stack: `trycmd` runs documented command/output transcripts
+  as snapshot tests (living docs that fail the build when output drifts), `assert_cmd`
+  exercises flags, edge cases, and failure exit codes, and `assert_fs` sandboxes
+  filesystem state. Because they bind only to the CLI contract, the engine can be
+  rewritten freely (§7) and the tests still hold.
+- **Core unit/integration.** Engine logic (sync/divergence, templating, persistence, the
+  M2 gate) is covered directly against temp SQLite and temp git repos, fully offline (§8).
+- **UI end-to-end.** When the GUI lands, comprehensive Playwright tests cover the user
+  flows, not just rendering.
+
+Tests run on every commit; the trunk stays green (§12).
 
 ### 10. UX is a priority, not a polish phase
 The tool must reduce cognitive load. Friction, ambiguity, or noise in the overview is
