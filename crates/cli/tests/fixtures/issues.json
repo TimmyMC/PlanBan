@@ -1,0 +1,7 @@
+{
+  "issues": [
+    { "key": "PROJ-12", "fields": { "summary": "Implement tracker sync", "status": { "name": "In Progress" } } },
+    { "key": "PROJ-31", "fields": { "summary": "Review the worktree PR", "status": { "name": "In Review" } } },
+    { "key": "PROJ-44", "fields": { "summary": "Fix flaky integration test", "status": { "name": "In Progress" } } }
+  ]
+}

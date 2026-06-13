@@ -73,6 +73,34 @@ clabby cron run [--once]                  Run scheduled jobs (or each once)
 Config is discovered as `clabby.toml` from the current directory upward, or passed
 with `--config`. See the examples for a documented schema.
 
+## Testing
+
+Tests are **black-box first** (Constitution §9): they drive the compiled binary and
+assert only on exit codes and stdout/stderr, so the engine can be rewritten without
+touching them.
+
+- `crates/cli/tests/cmd/*.md` — **living documentation** via [`trycmd`]. The markdown
+  transcripts (e.g. the command reference) are executed and checked against real output;
+  if the CLI changes, the docs fail the build. Regenerate after an intentional change:
+  `TRYCMD=overwrite cargo test -p clabby --test cli_docs`.
+- `crates/cli/tests/cli_blackbox.rs` — functional + failure-mode coverage with
+  [`assert_cmd`] and [`assert_fs`] (sync, divergence, sessions, worktrees, cron, and the
+  error paths), each in an isolated temp sandbox.
+- `crates/core/tests/e2e.rs` + module unit tests — the engine directly, against temp
+  SQLite and temp git repos.
+
+```sh
+cargo test                 # everything
+cargo test -p clabby-core  # the fast engine inner loop
+```
+
+Black-box tests require `node` and `git` on PATH (the offline fake tracker is a node
+script; worktree tests use git).
+
+[`trycmd`]: https://docs.rs/trycmd
+[`assert_cmd`]: https://docs.rs/assert_cmd
+[`assert_fs`]: https://docs.rs/assert_fs
+
 ## Roadmap
 
 - **M2 — deterministic workflow engine:** column transitions run ordered

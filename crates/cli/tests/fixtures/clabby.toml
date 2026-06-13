@@ -1,0 +1,22 @@
+[project]
+name = "Test"
+db_path = ".clabby/clabby.db"
+worktrees_dir = "wt"
+
+[tracker]
+fetch = "node tracker.mjs issues.json fetch"
+push  = "node tracker.mjs issues.json transition {{ key }} \"{{ status }}\""
+jql   = ""
+
+[tracker.map]
+items   = "issues"
+key     = "key"
+summary = "fields.summary"
+status  = "fields.status.name"
+
+[agents.echo]
+cmd = "echo ran agent for {{ issue_key }}"
+
+[[cron]]
+schedule = "0 0 * * * *"
+action = "sync"
