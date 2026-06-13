@@ -25,8 +25,6 @@ test("renders columns, cards, and the divergence badge", async ({ page }) => {
   await expect(page.getByTestId("card-PROJ-12")).toBeVisible();
   // PROJ-44's tracker moved to Done out from under us.
   await expect(page.getByTestId("card-PROJ-44")).toContainText("diverged");
-
-  await page.screenshot({ path: "board.png", fullPage: true });
 });
 
 test("surfaces live session, git, and worktree state on a card", async ({ page }) => {

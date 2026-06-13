@@ -10,6 +10,13 @@ Clabby is **not** an autonomous agent runner. It enforces your workflow; you do 
 thinking. See [`CONSTITUTION.md`](./CONSTITUTION.md) for the principles that govern
 every change.
 
+![The Clabby board — Tauri + React (M3)](docs/board.png)
+
+> The board: columns are tracker statuses; each card surfaces the issue's live
+> session, git, and worktree state, and an out-of-band tracker change is flagged as
+> **diverged**. Shown with the offline demo data — regenerate with
+> `pnpm --dir ui screenshot`.
+
 ## Status: Milestones 1–2 (headless command center + workflow engine)
 
 Working today, fully headless via the CLI:
