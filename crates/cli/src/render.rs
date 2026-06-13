@@ -84,16 +84,26 @@ pub fn overview_table(rows: &[OverviewRow]) -> String {
     const W_WT: usize = 16;
     const W_GIT: usize = 20;
 
+    // Trim trailing whitespace per line: cleaner terminal output and stable,
+    // lint-proof snapshots for the black-box doc tests.
+    fn push_line(out: &mut String, line: String) {
+        out.push_str(line.trim_end());
+        out.push('\n');
+    }
+
     let mut out = String::new();
-    out.push_str(&format!(
-        "{} {} {} {} {} {}\n",
-        pad("ISSUE", W_ISSUE),
-        pad("STATUS", W_STATUS),
-        pad("SESSION", W_SESSION),
-        pad("WORKTREE", W_WT),
-        pad("GIT", W_GIT),
-        "FLAGS",
-    ));
+    push_line(
+        &mut out,
+        format!(
+            "{} {} {} {} {} {}",
+            pad("ISSUE", W_ISSUE),
+            pad("STATUS", W_STATUS),
+            pad("SESSION", W_SESSION),
+            pad("WORKTREE", W_WT),
+            pad("GIT", W_GIT),
+            "FLAGS",
+        ),
+    );
 
     if rows.is_empty() {
         out.push_str("(no issues — run `clabby sync`)\n");
@@ -101,15 +111,18 @@ pub fn overview_table(rows: &[OverviewRow]) -> String {
     }
 
     for row in rows {
-        out.push_str(&format!(
-            "{} {} {} {} {} {}\n",
-            pad(&row.issue.key, W_ISSUE),
-            pad(&row.issue.local_status, W_STATUS),
-            pad(&session_cell(&row.sessions), W_SESSION),
-            pad(&worktree_cell(&row.worktree_path), W_WT),
-            pad(&git_cell(&row.git), W_GIT),
-            flags_cell(row),
-        ));
+        push_line(
+            &mut out,
+            format!(
+                "{} {} {} {} {} {}",
+                pad(&row.issue.key, W_ISSUE),
+                pad(&row.issue.local_status, W_STATUS),
+                pad(&session_cell(&row.sessions), W_SESSION),
+                pad(&worktree_cell(&row.worktree_path), W_WT),
+                pad(&git_cell(&row.git), W_GIT),
+                flags_cell(row),
+            ),
+        );
     }
 
     let diverged = rows.iter().filter(|r| r.issue.diverged).count();

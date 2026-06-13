@@ -279,7 +279,7 @@ async fn cmd_session(config: &Config, db: &Db, cmd: SessionCmd) -> Result<()> {
                 println!("(no sessions)");
             }
             for s in sessions {
-                println!(
+                let line = format!(
                     "{:>4}  {:8}  {:8}  {:10}  {}",
                     s.id,
                     s.kind.as_str(),
@@ -287,6 +287,7 @@ async fn cmd_session(config: &Config, db: &Db, cmd: SessionCmd) -> Result<()> {
                     s.issue_key,
                     s.worktree_path.unwrap_or_default()
                 );
+                println!("{}", line.trim_end());
             }
             Ok(())
         }
