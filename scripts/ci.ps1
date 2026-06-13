@@ -1,7 +1,10 @@
 #!/usr/bin/env pwsh
 # Local CI — the exact gate that .github/workflows/ci.yml enforces.
 # Run before pushing:  ./scripts/ci.ps1
-$ErrorActionPreference = 'Stop'
+#
+# Note: we intentionally do NOT set $ErrorActionPreference='Stop'. cargo writes
+# normal progress to stderr, which PowerShell 5.1 would otherwise treat as a
+# terminating error. We gate on $LASTEXITCODE instead.
 
 function Step($name, $block) {
     Write-Host "== $name ==" -ForegroundColor Cyan
