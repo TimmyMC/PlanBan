@@ -5,6 +5,10 @@
 //! command (`status`) is the overview.
 
 #![warn(clippy::all)]
+#![forbid(unsafe_code)]
+// Enforce the no-panic-in-production rule (§ error handling); tests may unwrap freely.
+#![cfg_attr(not(test), warn(clippy::unwrap_used, clippy::expect_used))]
+#![warn(clippy::dbg_macro)]
 // Pedantic/style noise stays opt-out so velocity isn't taxed if pedantic is enabled later.
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::must_use_candidate)]
