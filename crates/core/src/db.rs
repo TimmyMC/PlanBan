@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS cron_runs (
     detail TEXT
 );
 
--- Audit trail: override reasons and other manual actions (Milestone 2).
+-- Operational log: override reasons and other manual actions, for debugging.
 CREATE TABLE IF NOT EXISTS audit_log (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     ts        TEXT NOT NULL,

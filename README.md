@@ -25,8 +25,8 @@ Working today, fully headless via the CLI:
 - **Deterministic transitions (M2)** — `clabby move <issue> <status>` runs that
   transition's configured steps in order under **gate-with-override**: a required step
   that fails blocks the move (the issue stays put, nothing downstream runs) until you
-  fix it or `clabby override <issue> --reason "…"` — which records the reason to an
-  audit trail and resumes. Steps are command templates or agent runs; `when` guards and
+  fix it or `clabby override <issue> --reason "…"` — which records the reason (logged
+  for debugging) and resumes. Steps are command templates or agent runs; `when` guards and
   best-effort hooks are supported.
 
 Everything external is a **command template** — no tracker, VCS host, or agent is
@@ -136,7 +136,8 @@ executes it in Docker.)
 ## Roadmap
 
 - ✅ **M1 — headless command center** (sync, sessions, worktrees, overview, cron).
-- ✅ **M2 — deterministic workflow engine:** gated `move`/`override` with an audit trail.
+- ✅ **M2 — deterministic workflow engine:** gated `move`/`override`, with override
+  reasons logged for debugging.
 - **M3 — Tauri + React board:** drag-to-transition, live session panels, with
   comprehensive Playwright end-to-end coverage.
 - **Future — `clabby init --from-jira`:** bootstrap config from a live instance's

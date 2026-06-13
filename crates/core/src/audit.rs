@@ -1,8 +1,9 @@
-//! Audit trail for manual interventions (Constitution §2).
+//! Operational log of manual interventions (Constitution §2).
 //!
-//! Right now the only audited action is overriding a blocked required step, which
-//! must carry a human-supplied reason — the regulatory paper trail for "why did
-//! this workflow proceed despite a failed mandatory step?".
+//! Right now the only logged action is overriding a blocked required step, which
+//! carries a human-supplied reason. This is for debugging and operational clarity
+//! ("why did this workflow proceed despite a failed mandatory step?") — not a
+//! regulatory compliance record.
 
 use crate::db::Db;
 use crate::Result;

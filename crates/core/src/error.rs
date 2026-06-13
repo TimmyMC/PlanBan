@@ -24,7 +24,7 @@ pub enum Error {
     Template(#[from] minijinja::Error),
 
     /// An external command (issue tracker, git, agent, hook) exited non-zero or
-    /// could not be spawned. Carries human-facing detail for the audit trail.
+    /// could not be spawned. Carries human-facing detail for diagnostics.
     #[error("command failed: {0}")]
     Command(String),
 

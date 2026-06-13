@@ -21,8 +21,9 @@ separates Clabby from autonomous agent runners.
 
 ### 2. Determinism over cleverness
 Mandatory workflow steps run exactly and every time. No skipped steps, no "the agent
-usually does it." Failures gate the workflow; overrides are explicit and audited with
-a recorded reason.
+usually does it." Failures gate the workflow; overriding a gate is an explicit action
+that records a reason — for debugging and operational clarity ("why was this bypassed?"),
+not as a regulatory compliance trail. Logging exists to be useful, not to certify.
 
 ### 3. Overview first
 The primary job is situational awareness across many concurrent work streams. If a

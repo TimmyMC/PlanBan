@@ -3,8 +3,9 @@
 //! Moving an issue from one status to another runs the configured transition's
 //! steps in order. A required step that fails **gates** the transition: the issue
 //! stays in its source state and nothing downstream runs (§2). A human can
-//! override the blocked step with a recorded reason (§2 audit trail), which
-//! resumes the remaining steps. The whole workflow is config (§5, §11) — the
+//! override the blocked step with a recorded reason (logged for debugging, not
+//! compliance), which resumes the remaining steps. The whole workflow is config
+//! (§5, §11) — the
 //! engine knows only "issue", "status", "step".
 
 use serde_json::{json, Value};
