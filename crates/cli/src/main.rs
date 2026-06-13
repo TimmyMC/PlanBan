@@ -24,6 +24,7 @@ use tokio::sync::broadcast::error::RecvError;
 
 use clabby_core::config::Config;
 use clabby_core::db::Db;
+use clabby_core::engine::{self, TransitionOutcome};
 use clabby_core::events::{Event, EventBus};
 use clabby_core::{git, overview, session, sync};
 
@@ -67,6 +68,14 @@ enum Command {
     /// Cron scheduler for configured [[cron]] jobs.
     #[command(subcommand)]
     Cron(CronCmd),
+    /// Move an issue to a new status, running the transition's steps (gated).
+    Move { key: String, to: String },
+    /// Override the blocked step of an issue's transition (records a reason).
+    Override {
+        key: String,
+        #[arg(long)]
+        reason: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -185,7 +194,85 @@ async fn main() -> Result<()> {
             let (config, db) = load(&cli.config).await?;
             cmd_cron_run(&config, &db, once).await
         }
+        Command::Move { key, to } => {
+            let (config, db) = load(&cli.config).await?;
+            cmd_move(&config, &db, &key, &to).await
+        }
+        Command::Override { key, reason } => {
+            let (config, db) = load(&cli.config).await?;
+            cmd_override(&config, &db, &key, &reason).await
+        }
     }
+}
+
+/// Subscribe to the event bus and print streamed agent log lines live (§7: core
+/// only publishes). Returns a handle to await after dropping the bus.
+fn spawn_log_printer(bus: &EventBus) -> tokio::task::JoinHandle<()> {
+    let mut rx = bus.subscribe();
+    tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                Ok(Event::SessionLog { stream, line, .. }) => {
+                    if stream == "stderr" {
+                        eprintln!("{line}");
+                    } else {
+                        println!("{line}");
+                    }
+                }
+                Ok(_) => {}
+                Err(RecvError::Lagged(_)) => continue,
+                Err(RecvError::Closed) => break,
+            }
+        }
+    })
+}
+
+fn report_outcome(o: &TransitionOutcome) {
+    if o.completed {
+        println!(
+            "Moved {} : {} -> {}  (transition #{})",
+            o.issue_key, o.from, o.to, o.transition_run_id
+        );
+    } else if let Some(b) = &o.blocked {
+        println!("BLOCKED moving {} : {} -> {}", o.issue_key, o.from, o.to);
+        println!("  required step '{}' failed: {}", b.step_id, b.error);
+        println!(
+            "  override with: clabby override {} --reason \"...\"",
+            o.issue_key
+        );
+    }
+}
+
+async fn cmd_move(config: &Config, db: &Db, key: &str, to: &str) -> Result<()> {
+    let bus = EventBus::new();
+    let printer = spawn_log_printer(&bus);
+    let outcome = engine::transition(db, config, &bus, key, to).await;
+    drop(bus);
+    let _ = printer.await;
+
+    let outcome = outcome?;
+    report_outcome(&outcome);
+    if !outcome.completed {
+        // Gate worked as designed, but signal "did not complete" to scripts.
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+async fn cmd_override(config: &Config, db: &Db, key: &str, reason: &str) -> Result<()> {
+    let bus = EventBus::new();
+    let printer = spawn_log_printer(&bus);
+    let outcome = engine::override_for_issue(db, config, &bus, key, reason).await;
+    drop(bus);
+    let _ = printer.await;
+
+    let outcome = outcome?;
+    println!("Override recorded for {key} (reason logged to audit).");
+    report_outcome(&outcome);
+    if !outcome.completed {
+        std::process::exit(1);
+    }
+    Ok(())
 }
 
 /// Load config (explicit path or discovered) and open the database.
@@ -239,25 +326,7 @@ async fn cmd_session(config: &Config, db: &Db, cmd: SessionCmd) -> Result<()> {
     match cmd {
         SessionCmd::Spawn { key, agent } => {
             let bus = EventBus::new();
-            let mut rx = bus.subscribe();
-            // Print streamed log lines live; core only publishes (§7).
-            let printer = tokio::spawn(async move {
-                loop {
-                    match rx.recv().await {
-                        Ok(Event::SessionLog { stream, line, .. }) => {
-                            if stream == "stderr" {
-                                eprintln!("{line}");
-                            } else {
-                                println!("{line}");
-                            }
-                        }
-                        Ok(_) => {}
-                        Err(RecvError::Lagged(_)) => continue,
-                        Err(RecvError::Closed) => break,
-                    }
-                }
-            });
-
+            let printer = spawn_log_printer(&bus);
             let result = session::run_managed(db, &bus, config, &key, &agent).await;
             drop(bus); // closes the channel so the printer task ends
             let _ = printer.await;
