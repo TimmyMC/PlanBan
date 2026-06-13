@@ -29,6 +29,11 @@ Required status checks (enforced by branch protection on `trunk`):
 | `fmt · clippy · test`     | `cargo fmt --check`, `clippy -D warnings`, full test suite |
 | `coverage (>=75% lines)`  | `cargo llvm-cov --fail-under-lines 75`                     |
 | `build · e2e`             | frontend `tsc`+`vite` build, Biome lint, Playwright e2e    |
+| `tauri shell`             | compiles the Tauri desktop shell + `clippy -D warnings`    |
+
+The Tauri shell lives outside the cargo workspace (WebView2 system deps), so the
+workspace `cargo test --workspace` deliberately doesn't touch it — the `tauri shell`
+job is what gates that crate so it can't silently stop compiling.
 
 The coverage bar is **75% line coverage**, measured across the workspace by
 `cargo-llvm-cov`. Baseline when the gate landed was ~79%; the 75% floor leaves a
