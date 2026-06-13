@@ -127,7 +127,13 @@ pub fn spawn_streaming(
         tokio::spawn(async move {
             let mut reader = BufReader::new(out).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                if tx.send(LogLine { stream: Stream::Stdout, text: line }).is_err() {
+                if tx
+                    .send(LogLine {
+                        stream: Stream::Stdout,
+                        text: line,
+                    })
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -138,14 +144,24 @@ pub fn spawn_streaming(
         tokio::spawn(async move {
             let mut reader = BufReader::new(err).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                if tx.send(LogLine { stream: Stream::Stderr, text: line }).is_err() {
+                if tx
+                    .send(LogLine {
+                        stream: Stream::Stderr,
+                        text: line,
+                    })
+                    .is_err()
+                {
                     break;
                 }
             }
         });
     }
 
-    Ok(StreamingChild { child, pid, lines: rx })
+    Ok(StreamingChild {
+        child,
+        pid,
+        lines: rx,
+    })
 }
 
 #[cfg(test)]

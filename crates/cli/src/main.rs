@@ -4,6 +4,12 @@
 //! future GUI through the same engine functions. UX-first (§10): the default
 //! command (`status`) is the overview.
 
+#![warn(clippy::all)]
+// Pedantic/style noise stays opt-out so velocity isn't taxed if pedantic is enabled later.
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::module_name_repetitions)]
+
 mod render;
 
 use std::path::PathBuf;
@@ -270,7 +276,10 @@ async fn cmd_session(config: &Config, db: &Db, cmd: SessionCmd) -> Result<()> {
             log,
         } => {
             let s = session::attach(db, &key, &worktree, branch.as_deref(), log.as_deref()).await?;
-            println!("Attached external session {} to {key} (worktree {worktree})", s.id);
+            println!(
+                "Attached external session {} to {key} (worktree {worktree})",
+                s.id
+            );
             Ok(())
         }
         SessionCmd::List => {
@@ -402,7 +411,9 @@ async fn run_cron_action(db: &Db, config: &Config, bus: &EventBus, action: &str)
                 let _ = db.insert_cron_run("sync", true, Some(&detail)).await;
             }
             Err(e) => {
-                let _ = db.insert_cron_run("sync", false, Some(&e.to_string())).await;
+                let _ = db
+                    .insert_cron_run("sync", false, Some(&e.to_string()))
+                    .await;
             }
         },
         other => {

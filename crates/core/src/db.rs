@@ -3,6 +3,14 @@
 //! Timestamps are stored as RFC3339 text and booleans as 0/1 integers so the
 //! on-disk format is predictable and inspectable (§8: easy to verify). Mapping to
 //! domain types happens here; callers see only `model` types.
+//!
+//! **Deliberate choice:** queries use the runtime `sqlx::query` API, not the
+//! compile-time-checked `query!` macros. The macros require a `DATABASE_URL` or a
+//! committed offline cache at build time and a regeneration step on every SQL
+//! change — friction that fights velocity (Constitution §8, §12). Correctness of
+//! these queries is instead guaranteed by the integration tests
+//! (`crates/core/tests/e2e.rs` and the CLI black-box suite), which exercise every
+//! statement end-to-end against a real database.
 
 use std::path::Path;
 
@@ -292,7 +300,11 @@ impl Db {
     }
 
     /// Most recent `limit` log lines for a session, in chronological order.
-    pub async fn tail_logs(&self, session_id: i64, limit: i64) -> Result<Vec<(String, String, DateTime<Utc>)>> {
+    pub async fn tail_logs(
+        &self,
+        session_id: i64,
+        limit: i64,
+    ) -> Result<Vec<(String, String, DateTime<Utc>)>> {
         let rows = sqlx::query(
             "SELECT stream, line, ts FROM session_logs WHERE session_id = ? ORDER BY id DESC LIMIT ?",
         )
@@ -340,16 +352,23 @@ impl Db {
     }
 
     pub async fn worktree_for_issue(&self, issue_key: &str) -> Result<Option<Worktree>> {
-        let row = sqlx::query("SELECT * FROM worktrees WHERE issue_key = ? ORDER BY created_at DESC LIMIT 1")
-            .bind(issue_key)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(
+            "SELECT * FROM worktrees WHERE issue_key = ? ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(issue_key)
+        .fetch_optional(&self.pool)
+        .await?;
         row.map(row_to_worktree).transpose()
     }
 
     // ---- logs of cross-cutting activity ------------------------------------
 
-    pub async fn insert_sync_log(&self, fetched: i64, diverged: i64, detail: Option<&str>) -> Result<()> {
+    pub async fn insert_sync_log(
+        &self,
+        fetched: i64,
+        diverged: i64,
+        detail: Option<&str>,
+    ) -> Result<()> {
         sqlx::query("INSERT INTO sync_log (ts, fetched, diverged, detail) VALUES (?, ?, ?, ?)")
             .bind(Utc::now().to_rfc3339())
             .bind(fetched)
@@ -360,7 +379,12 @@ impl Db {
         Ok(())
     }
 
-    pub async fn insert_cron_run(&self, action: &str, ok: bool, detail: Option<&str>) -> Result<()> {
+    pub async fn insert_cron_run(
+        &self,
+        action: &str,
+        ok: bool,
+        detail: Option<&str>,
+    ) -> Result<()> {
         sqlx::query("INSERT INTO cron_runs (action, ts, ok, detail) VALUES (?, ?, ?, ?)")
             .bind(action)
             .bind(Utc::now().to_rfc3339())

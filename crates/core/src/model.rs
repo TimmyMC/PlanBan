@@ -31,7 +31,11 @@ pub struct Issue {
 
 impl Issue {
     /// A freshly-seen issue from the tracker with no local history yet.
-    pub fn new(key: impl Into<String>, summary: impl Into<String>, status: impl Into<String>) -> Self {
+    pub fn new(
+        key: impl Into<String>,
+        summary: impl Into<String>,
+        status: impl Into<String>,
+    ) -> Self {
         let status = status.into();
         Issue {
             key: key.into(),
@@ -79,7 +83,9 @@ impl std::str::FromStr for SessionKind {
         match s {
             "managed" => Ok(SessionKind::Managed),
             "external" => Ok(SessionKind::External),
-            other => Err(crate::Error::other(format!("unknown session kind: {other}"))),
+            other => Err(crate::Error::other(format!(
+                "unknown session kind: {other}"
+            ))),
         }
     }
 }
@@ -125,7 +131,11 @@ impl std::str::FromStr for SessionStatus {
             "idle" => SessionStatus::Idle,
             "failed" => SessionStatus::Failed,
             "exited" => SessionStatus::Exited,
-            other => return Err(crate::Error::other(format!("unknown session status: {other}"))),
+            other => {
+                return Err(crate::Error::other(format!(
+                    "unknown session status: {other}"
+                )))
+            }
         })
     }
 }

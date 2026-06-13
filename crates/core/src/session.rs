@@ -29,10 +29,9 @@ pub async fn run_managed(
     issue_key: &str,
     agent_name: &str,
 ) -> Result<Session> {
-    let agent = config
-        .agents
-        .get(agent_name)
-        .ok_or_else(|| Error::not_found(format!("agent '{agent_name}' is not defined in [agents]")))?;
+    let agent = config.agents.get(agent_name).ok_or_else(|| {
+        Error::not_found(format!("agent '{agent_name}' is not defined in [agents]"))
+    })?;
 
     let wt = db.worktree_for_issue(issue_key).await?;
     let wt_path = wt.as_ref().map(|w| w.path.clone());
@@ -88,7 +87,8 @@ pub async fn run_managed(
     // Stream every line into the log store and out to subscribers.
     while let Some(line) = streaming.lines.recv().await {
         let ts = Utc::now();
-        db.insert_log(session.id, line.stream.as_str(), &line.text, ts).await?;
+        db.insert_log(session.id, line.stream.as_str(), &line.text, ts)
+            .await?;
         bus.publish(Event::SessionLog {
             session_id: session.id,
             stream: line.stream.as_str().to_string(),

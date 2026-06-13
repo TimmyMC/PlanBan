@@ -96,7 +96,11 @@ fn our_push_reconciles_but_external_change_diverges() {
     let tmp = project();
     let issues = tmp.path().join("issues.json");
 
-    clabby().current_dir(tmp.path()).arg("sync").assert().success();
+    clabby()
+        .current_dir(tmp.path())
+        .arg("sync")
+        .assert()
+        .success();
 
     // Our own transition, via Clabby (pushes back to the tracker).
     clabby()
@@ -117,10 +121,7 @@ fn our_push_reconciles_but_external_change_diverges() {
         .arg("sync")
         .assert()
         .success()
-        .stdout(
-            predicate::str::contains("1 diverged")
-                .and(predicate::str::contains("PROJ-44")),
-        );
+        .stdout(predicate::str::contains("1 diverged").and(predicate::str::contains("PROJ-44")));
 
     clabby()
         .current_dir(tmp.path())
@@ -137,7 +138,11 @@ fn our_push_reconciles_but_external_change_diverges() {
 #[test]
 fn managed_session_runs_and_is_recorded() {
     let tmp = project();
-    clabby().current_dir(tmp.path()).arg("sync").assert().success();
+    clabby()
+        .current_dir(tmp.path())
+        .arg("sync")
+        .assert()
+        .success();
 
     clabby()
         .current_dir(tmp.path())
@@ -154,9 +159,7 @@ fn managed_session_runs_and_is_recorded() {
         .args(["session", "list"])
         .assert()
         .success()
-        .stdout(
-            predicate::str::contains("managed").and(predicate::str::contains("exited")),
-        );
+        .stdout(predicate::str::contains("managed").and(predicate::str::contains("exited")));
 }
 
 #[test]

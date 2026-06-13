@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use clabby_core::config::{Config, ProjectConfig, TrackerConfig, TrackerMap, AgentConfig};
+use clabby_core::config::{AgentConfig, Config, ProjectConfig, TrackerConfig, TrackerMap};
 use clabby_core::db::Db;
 use clabby_core::events::EventBus;
 use clabby_core::model::SessionStatus;
@@ -112,7 +112,9 @@ async fn full_pipeline() {
     assert!(!p1.diverged);
 
     // --- push: Clabby transitions PROJ-1, then the tracker reflects it ------
-    sync::push_status(&db, &config, "PROJ-1", "In Review").await.unwrap();
+    sync::push_status(&db, &config, "PROJ-1", "In Review")
+        .await
+        .unwrap();
     let p1 = db.get_issue("PROJ-1").await.unwrap().unwrap();
     assert_eq!(p1.local_status, "In Review");
     assert_eq!(p1.last_pushed_status.as_deref(), Some("In Review"));
@@ -150,7 +152,8 @@ async fn full_pipeline() {
 
     let logs = db.tail_logs(s.id, 50).await.unwrap();
     assert!(
-        logs.iter().any(|(_, line, _)| line.contains("agent-ran-for PROJ-1")),
+        logs.iter()
+            .any(|(_, line, _)| line.contains("agent-ran-for PROJ-1")),
         "expected agent output in logs, got: {logs:?}"
     );
 
@@ -158,16 +161,26 @@ async fn full_pipeline() {
     let rows = overview::build(&db).await.unwrap();
     assert_eq!(rows.len(), 2);
     let p1row = rows.iter().find(|r| r.issue.key == "PROJ-1").unwrap();
-    assert!(p1row.git.is_some(), "PROJ-1 has a worktree, expected git state");
-    assert_eq!(p1row.git.as_ref().unwrap().branch.as_deref(), Some("feature/PROJ-1"));
+    assert!(
+        p1row.git.is_some(),
+        "PROJ-1 has a worktree, expected git state"
+    );
+    assert_eq!(
+        p1row.git.as_ref().unwrap().branch.as_deref(),
+        Some("feature/PROJ-1")
+    );
     assert!(!p1row.sessions.is_empty());
 }
 
 async fn init_git_repo(root: &Path) {
     // -b main needs git >= 2.28; fall back is not needed on modern installs.
     run_capture("git init -b main", Some(root)).await.unwrap();
-    run_capture("git config user.email test@clabby.local", Some(root)).await.unwrap();
-    run_capture("git config user.name clabby-test", Some(root)).await.unwrap();
+    run_capture("git config user.email test@clabby.local", Some(root))
+        .await
+        .unwrap();
+    run_capture("git config user.name clabby-test", Some(root))
+        .await
+        .unwrap();
     std::fs::write(root.join("README.md"), "seed\n").unwrap();
     run_capture("git add -A", Some(root)).await.unwrap();
     run_capture("git commit -m seed", Some(root)).await.unwrap();

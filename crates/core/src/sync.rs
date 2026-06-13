@@ -33,9 +33,8 @@ pub async fn sync(db: &Db, config: &Config, bus: &EventBus) -> Result<SyncOutcom
         )));
     }
 
-    let value: serde_json::Value = serde_json::from_str(out.stdout.trim()).map_err(|e| {
-        Error::other(format!("tracker fetch did not return valid JSON: {e}"))
-    })?;
+    let value: serde_json::Value = serde_json::from_str(out.stdout.trim())
+        .map_err(|e| Error::other(format!("tracker fetch did not return valid JSON: {e}")))?;
 
     let map = &config.tracker.map;
     let items = jsonpath::get_array(&value, &map.items).ok_or_else(|| {
@@ -53,7 +52,10 @@ pub async fn sync(db: &Db, config: &Config, bus: &EventBus) -> Result<SyncOutcom
         };
         let summary = jsonpath::get_str(item, &map.summary).unwrap_or_default();
         let tracker_status = jsonpath::get_str(item, &map.status).unwrap_or_default();
-        let assignee = map.assignee.as_deref().and_then(|p| jsonpath::get_str(item, p));
+        let assignee = map
+            .assignee
+            .as_deref()
+            .and_then(|p| jsonpath::get_str(item, p));
         let url = map.url.as_deref().and_then(|p| jsonpath::get_str(item, p));
         let labels = map
             .labels
@@ -62,7 +64,15 @@ pub async fn sync(db: &Db, config: &Config, bus: &EventBus) -> Result<SyncOutcom
             .unwrap_or_default();
 
         let existing = db.get_issue(&key).await?;
-        let issue = reconcile(existing, key.clone(), summary, tracker_status, assignee, url, labels);
+        let issue = reconcile(
+            existing,
+            key.clone(),
+            summary,
+            tracker_status,
+            assignee,
+            url,
+            labels,
+        );
 
         if issue.diverged {
             outcome.diverged += 1;
@@ -77,7 +87,8 @@ pub async fn sync(db: &Db, config: &Config, bus: &EventBus) -> Result<SyncOutcom
         outcome.fetched += 1;
     }
 
-    db.insert_sync_log(outcome.fetched as i64, outcome.diverged as i64, None).await?;
+    db.insert_sync_log(outcome.fetched as i64, outcome.diverged as i64, None)
+        .await?;
     bus.publish(Event::SyncCompleted {
         fetched: outcome.fetched,
         diverged: outcome.diverged,
@@ -158,7 +169,15 @@ mod tests {
 
     #[test]
     fn new_issue_is_not_diverged() {
-        let i = reconcile(None, "P-1".into(), "s".into(), "To Do".into(), None, None, vec![]);
+        let i = reconcile(
+            None,
+            "P-1".into(),
+            "s".into(),
+            "To Do".into(),
+            None,
+            None,
+            vec![],
+        );
         assert!(!i.diverged);
         assert_eq!(i.tracker_status, "To Do");
         assert_eq!(i.local_status, "To Do");
@@ -167,7 +186,15 @@ mod tests {
     #[test]
     fn unchanged_status_is_not_diverged() {
         let existing = seen("P-1", "In Progress");
-        let i = reconcile(Some(existing), "P-1".into(), "s".into(), "In Progress".into(), None, None, vec![]);
+        let i = reconcile(
+            Some(existing),
+            "P-1".into(),
+            "s".into(),
+            "In Progress".into(),
+            None,
+            None,
+            vec![],
+        );
         assert!(!i.diverged);
     }
 
@@ -178,7 +205,15 @@ mod tests {
         existing.local_status = "In Review".into();
         existing.last_pushed_status = Some("In Review".into());
         // Tracker now reports the value we pushed.
-        let i = reconcile(Some(existing), "P-1".into(), "s".into(), "In Review".into(), None, None, vec![]);
+        let i = reconcile(
+            Some(existing),
+            "P-1".into(),
+            "s".into(),
+            "In Review".into(),
+            None,
+            None,
+            vec![],
+        );
         assert!(!i.diverged);
         assert_eq!(i.local_status, "In Review");
     }
@@ -189,7 +224,15 @@ mod tests {
         existing.local_status = "In Progress".into();
         existing.last_pushed_status = Some("In Progress".into());
         // Someone else moved it to Done in the tracker.
-        let i = reconcile(Some(existing), "P-1".into(), "s".into(), "Done".into(), None, None, vec![]);
+        let i = reconcile(
+            Some(existing),
+            "P-1".into(),
+            "s".into(),
+            "Done".into(),
+            None,
+            None,
+            vec![],
+        );
         assert!(i.diverged);
         assert_eq!(i.local_status, "Done");
         assert_eq!(i.tracker_status, "Done");
