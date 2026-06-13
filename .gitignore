@@ -1,7 +1,11 @@
 # Rust
 /target
+debug
 **/*.rs.bk
 *.pdb
+
+# cargo mutants — mutation testing data
+**/mutants.out*/
 
 # Clabby local state
 *.db
