@@ -15,7 +15,7 @@ clap = { version = "4", features = ["derive"] }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio-cron-scheduler = "0.13"
+tokio-cron-scheduler = "0.15.1"
 serde_json = { workspace = true }
 chrono = { workspace = true }
 
