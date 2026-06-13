@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Default IPC capabilities for the Clabby board window.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

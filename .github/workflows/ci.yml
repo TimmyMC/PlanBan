@@ -27,7 +27,7 @@ jobs:
       - name: Set up Node (offline fake tracker in the black-box tests)
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Format check
         run: cargo fmt --all -- --check
@@ -37,3 +37,32 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+
+  frontend:
+    name: build · e2e
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium
+
+      - name: E2E tests
+        run: pnpm run test:e2e

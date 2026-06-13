@@ -1,9 +1,10 @@
 import type { BoardData, MoveResult } from "@/types";
 import { mockApi } from "@/api/mock";
+import { tauriApi } from "@/api/tauri";
 
-/// The board's data port. The Tauri shell swaps in an `invoke()`-backed
-/// implementation; in the browser / Playwright the mock provides seeded data.
-/// Core stays the source of truth — this is just the driver boundary (§7).
+/// The board's data port. Tauri shell uses `tauriApi` (invoke-backed);
+/// browser and Playwright use `mockApi`. Core is the source of truth —
+/// this is just the driver boundary (§7).
 export interface Api {
   getBoard(): Promise<BoardData>;
   sync(): Promise<{ fetched: number; diverged: number }>;
@@ -11,6 +12,9 @@ export interface Api {
   override(key: string, reason: string): Promise<MoveResult>;
 }
 
-// TODO(M3 wiring): when running under Tauri (window.__TAURI__), use the
-// invoke-backed Api instead of the mock.
-export const api: Api = mockApi;
+// True when running inside the Tauri desktop shell.
+export const isTauri = Boolean(
+  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__,
+);
+
+export const api: Api = isTauri ? tauriApi : mockApi;

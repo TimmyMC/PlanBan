@@ -1,0 +1,19 @@
+[package]
+name = "clabby-tauri"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+# Not in the workspace: src-tauri has system-level Tauri deps (WebView2, etc.)
+# that would break `cargo test --workspace` in CI. Keep it a standalone crate
+# that references clabby-core via path. Run locally with `cargo tauri dev` from
+# the project root or `cargo build -p clabby-tauri` from src-tauri/.
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+clabby-core = { path = "../crates/core" }
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"

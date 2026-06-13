@@ -1,0 +1,31 @@
+{
+  "productName": "Clabby",
+  "version": "0.1.0",
+  "identifier": "com.clabby.app",
+  "build": {
+    "beforeDevCommand": "pnpm --dir ../ui dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm --dir ../ui build",
+    "frontendDist": "../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Clabby — command center",
+        "width": 1280,
+        "height": 800,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": []
+  }
+}

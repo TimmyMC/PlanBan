@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { BoardData } from "@/types";
-import { api } from "@/api";
+import { api, isTauri } from "@/api";
+import { listen } from "@tauri-apps/api/event";
 import { Board } from "@/components/Board";
 import { Button } from "@/components/ui/button";
 
@@ -15,6 +16,14 @@ export default function App() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  // Subscribe to real-time push events from the Rust EventBus (§3, §8).
+  // Guarded by `isTauri` so the `listen` call is never reached in browser / Playwright.
+  useEffect(() => {
+    if (!isTauri) return;
+    const p = listen("clabby://event", () => { void refresh(); });
+    return () => { void p.then((f) => f()); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onMove(key: string, to: string) {
     const res = await api.move(key, to);
