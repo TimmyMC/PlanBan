@@ -14,8 +14,10 @@
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::module_name_repetitions)]
 
+pub mod audit;
 pub mod config;
 pub mod db;
+pub mod engine;
 pub mod error;
 pub mod events;
 pub mod git;
@@ -31,4 +33,7 @@ pub use config::Config;
 pub use db::Db;
 pub use error::{Error, Result};
 pub use events::{Event, EventBus};
-pub use model::{GitState, Issue, Session, SessionKind, SessionStatus, Worktree};
+pub use model::{
+    GitState, Issue, Session, SessionKind, SessionStatus, StepRun, StepStatus, TransitionRun,
+    TransitionStatus, Worktree,
+};

@@ -21,6 +21,16 @@ pub struct Config {
     #[serde(default)]
     pub cron: Vec<CronConfig>,
 
+    /// Workflow transitions (Milestone 2). Moving an issue across a column boundary
+    /// runs the matching transition's steps under gate-with-override.
+    #[serde(default)]
+    pub transitions: Vec<TransitionConfig>,
+
+    /// Lifecycle hooks — best-effort side effects (notifications, logging). Use
+    /// required steps, not hooks, for anything that must gate a transition.
+    #[serde(default)]
+    pub hooks: HooksConfig,
+
     /// Absolute path of the config file's directory. Filled in by [`Config::load`];
     /// not part of the TOML. Relative paths in config resolve against this.
     #[serde(skip)]
@@ -103,6 +113,49 @@ pub struct CronConfig {
     pub action: String,
 }
 
+fn default_true() -> bool {
+    true
+}
+
+/// A workflow transition between two statuses, with the ordered steps to run.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransitionConfig {
+    pub from: String,
+    pub to: String,
+    #[serde(default)]
+    pub steps: Vec<StepConfig>,
+}
+
+/// One step in a transition. Exactly one of `cmd` / `agent` should be set.
+#[derive(Debug, Clone, Deserialize)]
+pub struct StepConfig {
+    /// Stable identifier, used in audit/override.
+    pub id: String,
+    /// A command template to run (rendered against the transition context).
+    #[serde(default)]
+    pub cmd: Option<String>,
+    /// Alternatively, the name of an `[agents.*]` entry to run as a managed session.
+    #[serde(default)]
+    pub agent: Option<String>,
+    /// Required steps gate the transition; optional steps log and continue on failure.
+    #[serde(default = "default_true")]
+    pub required: bool,
+    /// Optional minijinja guard expression; when false, the step is skipped.
+    #[serde(default)]
+    pub when: Option<String>,
+}
+
+/// Best-effort lifecycle hooks (command templates).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct HooksConfig {
+    #[serde(default)]
+    pub pre_transition: Vec<String>,
+    #[serde(default)]
+    pub post_transition: Vec<String>,
+    #[serde(default)]
+    pub on_step_fail: Vec<String>,
+}
+
 impl Config {
     /// Parse a config file and record its directory for relative-path resolution.
     pub fn load(path: impl AsRef<Path>) -> Result<Config> {
@@ -168,5 +221,12 @@ impl Config {
             Some(p) => self.resolve_path(p),
             None => self.root_dir.clone(),
         }
+    }
+
+    /// Find the configured transition for a `from` -> `to` move, if any.
+    pub fn find_transition(&self, from: &str, to: &str) -> Option<&TransitionConfig> {
+        self.transitions
+            .iter()
+            .find(|t| t.from == from && t.to == to)
     }
 }

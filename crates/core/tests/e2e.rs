@@ -5,7 +5,9 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use clabby_core::config::{AgentConfig, Config, ProjectConfig, TrackerConfig, TrackerMap};
+use clabby_core::config::{
+    AgentConfig, Config, HooksConfig, ProjectConfig, TrackerConfig, TrackerMap,
+};
 use clabby_core::db::Db;
 use clabby_core::events::EventBus;
 use clabby_core::model::SessionStatus;
@@ -77,6 +79,8 @@ fn make_config(root: &Path, issues_file: &Path) -> Config {
         states: vec![],
         agents,
         cron: vec![],
+        transitions: vec![],
+        hooks: HooksConfig::default(),
         root_dir: root.to_path_buf(),
     }
 }

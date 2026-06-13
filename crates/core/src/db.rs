@@ -18,7 +18,10 @@ use chrono::{DateTime, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteRow};
 use sqlx::{Row, SqlitePool};
 
-use crate::model::{Issue, Session, SessionKind, SessionStatus, Worktree};
+use crate::model::{
+    Issue, Session, SessionKind, SessionStatus, StepRun, StepStatus, TransitionRun,
+    TransitionStatus, Worktree,
+};
 use crate::{Error, Result};
 
 const SCHEMA: &str = r#"
@@ -82,7 +85,7 @@ CREATE TABLE IF NOT EXISTS cron_runs (
     detail TEXT
 );
 
--- Created now; populated by the Milestone 2 workflow engine (gate-with-override).
+-- Audit trail: override reasons and other manual actions (Milestone 2).
 CREATE TABLE IF NOT EXISTS audit_log (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     ts        TEXT NOT NULL,
@@ -91,6 +94,31 @@ CREATE TABLE IF NOT EXISTS audit_log (
     reason    TEXT,
     detail    TEXT
 );
+
+-- Milestone 2: one row per attempt to move an issue between statuses.
+CREATE TABLE IF NOT EXISTS transition_runs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    issue_key  TEXT NOT NULL,
+    from_state TEXT NOT NULL,
+    to_state   TEXT NOT NULL,
+    status     TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- One row per step executed within a transition.
+CREATE TABLE IF NOT EXISTS step_runs (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    transition_run_id INTEGER NOT NULL,
+    step_id           TEXT NOT NULL,
+    step_index        INTEGER NOT NULL,
+    required          INTEGER NOT NULL,
+    status            TEXT NOT NULL,
+    exit_code         INTEGER,
+    stderr            TEXT,
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_step_runs_transition ON step_runs(transition_run_id);
 "#;
 
 #[derive(Clone)]
@@ -109,6 +137,17 @@ pub struct NewSession<'a> {
     pub agent: Option<&'a str>,
     pub status: SessionStatus,
     pub log_path: Option<&'a str>,
+}
+
+/// Parameters for [`Db::insert_step_run`] (same rationale as [`NewSession`]).
+pub struct NewStepRun<'a> {
+    pub transition_run_id: i64,
+    pub step_id: &'a str,
+    pub step_index: i64,
+    pub required: bool,
+    pub status: StepStatus,
+    pub exit_code: Option<i64>,
+    pub stderr: Option<&'a str>,
 }
 
 fn parse_ts(s: &str) -> DateTime<Utc> {
@@ -401,6 +440,131 @@ impl Db {
             .await?;
         Ok(row.try_get::<i64, _>("n")?)
     }
+
+    // ---- transitions / steps / audit (Milestone 2) -------------------------
+
+    pub async fn insert_transition_run(
+        &self,
+        issue_key: &str,
+        from_state: &str,
+        to_state: &str,
+        status: TransitionStatus,
+    ) -> Result<i64> {
+        let now = Utc::now().to_rfc3339();
+        let row = sqlx::query(
+            r#"INSERT INTO transition_runs
+                (issue_key, from_state, to_state, status, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?) RETURNING id"#,
+        )
+        .bind(issue_key)
+        .bind(from_state)
+        .bind(to_state)
+        .bind(status.as_str())
+        .bind(&now)
+        .bind(&now)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.try_get::<i64, _>("id")?)
+    }
+
+    pub async fn update_transition_status(&self, id: i64, status: TransitionStatus) -> Result<()> {
+        sqlx::query("UPDATE transition_runs SET status = ?, updated_at = ? WHERE id = ?")
+            .bind(status.as_str())
+            .bind(Utc::now().to_rfc3339())
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_transition_run(&self, id: i64) -> Result<Option<TransitionRun>> {
+        let row = sqlx::query("SELECT * FROM transition_runs WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
+        row.map(row_to_transition_run).transpose()
+    }
+
+    /// The most recent blocked transition for an issue (the override target).
+    pub async fn latest_blocked_transition(
+        &self,
+        issue_key: &str,
+    ) -> Result<Option<TransitionRun>> {
+        let row = sqlx::query(
+            "SELECT * FROM transition_runs WHERE issue_key = ? AND status = 'blocked' ORDER BY id DESC LIMIT 1",
+        )
+        .bind(issue_key)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_transition_run).transpose()
+    }
+
+    pub async fn insert_step_run(&self, s: NewStepRun<'_>) -> Result<i64> {
+        let row = sqlx::query(
+            r#"INSERT INTO step_runs
+                (transition_run_id, step_id, step_index, required, status, exit_code, stderr, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"#,
+        )
+        .bind(s.transition_run_id)
+        .bind(s.step_id)
+        .bind(s.step_index)
+        .bind(i64::from(s.required))
+        .bind(s.status.as_str())
+        .bind(s.exit_code)
+        .bind(s.stderr)
+        .bind(Utc::now().to_rfc3339())
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.try_get::<i64, _>("id")?)
+    }
+
+    pub async fn update_step_status(&self, id: i64, status: StepStatus) -> Result<()> {
+        sqlx::query("UPDATE step_runs SET status = ? WHERE id = ?")
+            .bind(status.as_str())
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// The failed step that is blocking a transition (the one an override resumes).
+    pub async fn blocking_step(&self, transition_run_id: i64) -> Result<Option<StepRun>> {
+        let row = sqlx::query(
+            "SELECT * FROM step_runs WHERE transition_run_id = ? AND status = 'failed' ORDER BY step_index DESC LIMIT 1",
+        )
+        .bind(transition_run_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_step_run).transpose()
+    }
+
+    pub async fn insert_audit(
+        &self,
+        kind: &str,
+        issue_key: Option<&str>,
+        reason: Option<&str>,
+        detail: Option<&str>,
+    ) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO audit_log (ts, kind, issue_key, reason, detail) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(Utc::now().to_rfc3339())
+        .bind(kind)
+        .bind(issue_key)
+        .bind(reason)
+        .bind(detail)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn count_audit(&self, kind: &str) -> Result<i64> {
+        let row = sqlx::query("SELECT COUNT(*) as n FROM audit_log WHERE kind = ?")
+            .bind(kind)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.try_get::<i64, _>("n")?)
+    }
 }
 
 // ---- row -> model mappers ---------------------------------------------------
@@ -451,6 +615,38 @@ fn row_to_worktree(row: SqliteRow) -> Result<Worktree> {
         path: row.try_get("path")?,
         issue_key: row.try_get("issue_key")?,
         branch: row.try_get("branch")?,
+        created_at: parse_ts(&created_at),
+    })
+}
+
+fn row_to_transition_run(row: SqliteRow) -> Result<TransitionRun> {
+    let status: String = row.try_get("status")?;
+    let created_at: String = row.try_get("created_at")?;
+    let updated_at: String = row.try_get("updated_at")?;
+    Ok(TransitionRun {
+        id: row.try_get("id")?,
+        issue_key: row.try_get("issue_key")?,
+        from_state: row.try_get("from_state")?,
+        to_state: row.try_get("to_state")?,
+        status: status.parse::<TransitionStatus>()?,
+        created_at: parse_ts(&created_at),
+        updated_at: parse_ts(&updated_at),
+    })
+}
+
+fn row_to_step_run(row: SqliteRow) -> Result<StepRun> {
+    let status: String = row.try_get("status")?;
+    let required: i64 = row.try_get("required")?;
+    let created_at: String = row.try_get("created_at")?;
+    Ok(StepRun {
+        id: row.try_get("id")?,
+        transition_run_id: row.try_get("transition_run_id")?,
+        step_id: row.try_get("step_id")?,
+        step_index: row.try_get("step_index")?,
+        required: required != 0,
+        status: status.parse::<StepStatus>()?,
+        exit_code: row.try_get("exit_code")?,
+        stderr: row.try_get("stderr")?,
         created_at: parse_ts(&created_at),
     })
 }

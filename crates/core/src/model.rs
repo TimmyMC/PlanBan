@@ -175,3 +175,107 @@ pub struct GitState {
     pub dirty: bool,
     pub last_commit_summary: Option<String>,
 }
+
+// ---- Milestone 2: workflow transitions (gate-with-override) -----------------
+
+/// State of a single attempt to move an issue from one status to another.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TransitionStatus {
+    /// Steps are executing.
+    Running,
+    /// A required step failed; the issue stays in the source state until override.
+    Blocked,
+    /// All steps passed (or were overridden); the issue reached the target state.
+    Completed,
+}
+
+impl TransitionStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TransitionStatus::Running => "running",
+            TransitionStatus::Blocked => "blocked",
+            TransitionStatus::Completed => "completed",
+        }
+    }
+}
+
+impl std::str::FromStr for TransitionStatus {
+    type Err = crate::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "running" => TransitionStatus::Running,
+            "blocked" => TransitionStatus::Blocked,
+            "completed" => TransitionStatus::Completed,
+            other => {
+                return Err(crate::Error::other(format!(
+                    "unknown transition status: {other}"
+                )))
+            }
+        })
+    }
+}
+
+/// Outcome of running one step within a transition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StepStatus {
+    /// Ran successfully.
+    Ok,
+    /// Ran and failed (non-zero exit / spawn error).
+    Failed,
+    /// Skipped because its `when` guard was false.
+    Skipped,
+    /// A failed required step that a human explicitly overrode (audited).
+    Overridden,
+}
+
+impl StepStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            StepStatus::Ok => "ok",
+            StepStatus::Failed => "failed",
+            StepStatus::Skipped => "skipped",
+            StepStatus::Overridden => "overridden",
+        }
+    }
+}
+
+impl std::str::FromStr for StepStatus {
+    type Err = crate::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "ok" => StepStatus::Ok,
+            "failed" => StepStatus::Failed,
+            "skipped" => StepStatus::Skipped,
+            "overridden" => StepStatus::Overridden,
+            other => return Err(crate::Error::other(format!("unknown step status: {other}"))),
+        })
+    }
+}
+
+/// A persisted transition attempt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransitionRun {
+    pub id: i64,
+    pub issue_key: String,
+    pub from_state: String,
+    pub to_state: String,
+    pub status: TransitionStatus,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A persisted step execution within a transition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepRun {
+    pub id: i64,
+    pub transition_run_id: i64,
+    pub step_id: String,
+    pub step_index: i64,
+    pub required: bool,
+    pub status: StepStatus,
+    pub exit_code: Option<i64>,
+    pub stderr: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
