@@ -8,22 +8,25 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 
 ## Already in place (baseline)
 
-- ✅ `fmt · clippy · test` with `clippy -D warnings`
-- ✅ Coverage floor (`cargo-llvm-cov --fail-under-lines 75`)
-- ✅ Frontend `build · e2e` (tsc + Biome + Playwright) and a `tauri shell` build gate
+- ✅ `Lint & test` (cargo fmt/clippy `-D warnings`/test)
+- ✅ `Coverage` floor (`cargo-llvm-cov --fail-under-lines 75`)
+- ✅ `Frontend` (tsc + Biome + Playwright) and a `Desktop app` build gate
 - ✅ Panic discipline in core (`unwrap_used`/`expect_used`/`dbg_macro` denied outside tests)
 - ✅ Trunk-based auto-merge gated on the full CI workflow
 - ✅ Auto-format pre-commit hook (cargo fmt + Biome)
 
-## Tier 1 — highest leverage (this PR)
+## Tier 1 — highest leverage
 
-- 🚧 **Architectural fitness function** — a `cargo test` that fails if `clabby-core` gains
-  a UI/vendor/network dependency or imports a vendor crate (locks Constitution §7 & §11).
-- 🚧 **Supply-chain gate** — `cargo-deny` (RUSTSEC advisories, license allow-list, banned
-  & duplicate crates, source policy) as a CI job, plus `.github/dependabot.yml` covering
-  `cargo` (workspace + `src-tauri`), `npm` (`ui`), and `github-actions`.
-- 🚧 **Pinned toolchain** — `rust-toolchain.toml` (channel + components) so local and CI
+- ✅ **Architectural fitness function** (`crates/core/tests/architecture.rs`) — fails the
+  build if `clabby-core` gains a UI/vendor/network dependency or imports a vendor crate
+  (locks Constitution §7 & §11).
+- ✅ **Pinned toolchain** — `rust-toolchain.toml` (channel + components) so local and CI
   build the same compiler and clippy upgrades are deliberate PRs, not surprise breakage.
+- ✅ **Dependency updates** — `.github/dependabot.yml` covers `cargo` (workspace +
+  `src-tauri`), `npm` (`ui`), and `github-actions`.
+- ❌ **Supply-chain gate (`cargo-deny`)** — *removed as overkill for this project.* The
+  RUSTSEC-advisory/license/ban gate added too much friction for the value at this scale;
+  Dependabot covers dependency hygiene. Revisit if compliance ever requires a hard gate.
 
 ## Tier 1b — correctness, its own PR (bigger)
 
@@ -45,7 +48,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 
 ## Tier 3 — velocity at scale (keep the gates fast)
 
-- ⬜ **Path-filtered jobs** — run `tauri shell` / `build · e2e` only when `ui/**` or
+- ⬜ **Path-filtered jobs** — run `Desktop app` / `Frontend` only when `ui/**` or
   `src-tauri/**` change, so pure-Rust PRs aren't taxed by the frontend/Tauri build.
 - ⬜ **Faster tests + caching** — `cargo-nextest` (speed + native flaky-retry + JUnit),
   `sccache`; Playwright `retries` + trace-on-failure artifact upload.
