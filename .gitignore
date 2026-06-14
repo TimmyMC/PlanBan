@@ -25,6 +25,9 @@ debug
 # Local config overrides
 clabby.local.toml
 
+# Personal Claude Code settings (the committed .claude/settings.json is shared)
+.claude/settings.local.json
+
 # OS / editor
 .DS_Store
 Thumbs.db

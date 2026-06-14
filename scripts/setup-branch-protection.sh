@@ -36,7 +36,8 @@ gh api -X PUT "repos/$REPO/branches/trunk/protection" --input - >/dev/null <<'JS
       "fmt · clippy · test",
       "coverage (>=75% lines)",
       "build · e2e",
-      "tauri shell"
+      "tauri shell",
+      "supply-chain (cargo-deny)"
     ]
   },
   "enforce_admins": false,

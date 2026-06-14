@@ -9,7 +9,7 @@ name = "clabby"
 path = "src/main.rs"
 
 [dependencies]
-clabby-core = { path = "../core" }
+clabby-core = { path = "../core", version = "0.1.0" }
 tokio = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 anyhow = { workspace = true }
