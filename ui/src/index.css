@@ -2,7 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light is the project default. The dark palette lives under `.dark` for a
+   future theme toggle (nothing sets `.dark` today). */
 :root {
+  --background: 210 40% 97%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --muted: 214 30% 88%;
+  --muted-foreground: 215 16% 42%;
+  --border: 214 30% 85%;
+  --primary: 222 47% 24%;
+  --primary-foreground: 210 40% 98%;
+  --destructive: 0 72% 48%;
+  --accent: 200 90% 38%;
+}
+
+.dark {
   --background: 222 47% 11%;
   --foreground: 210 40% 98%;
   --card: 222 40% 16%;
