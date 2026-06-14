@@ -1,0 +1,20 @@
+# Ownership of the quality gates and the machinery that enforces them.
+#
+# The `Gate integrity` CI job (scripts/gate-guard.sh) already blocks auto-merge
+# when a PR weakens any of these without the `gate-change-approved` label. This
+# file is the second layer: enable "Require review from Code Owners" on the
+# `trunk` ruleset and a human review of these paths becomes mandatory too.
+
+# CI, auto-merge, and the guard itself.
+/.github/                               @TimmyMC
+
+# The coverage / use-case / architecture gates.
+/scripts/gate-guard.sh                  @TimmyMC
+/crates/cli/tests/use_case_coverage.rs  @TimmyMC
+/crates/cli/tests/cli_docs.rs           @TimmyMC
+/crates/core/tests/architecture.rs      @TimmyMC
+/ui/src/use-case-coverage.test.ts       @TimmyMC
+
+# The intent docs the gates read.
+/docs/use-cases.md                      @TimmyMC
+/CONSTITUTION.md                        @TimmyMC

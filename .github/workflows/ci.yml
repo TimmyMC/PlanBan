@@ -5,8 +5,12 @@ name: CI
 # merged result was tested) — a post-merge `push` run on trunk would just be a
 # redundant re-run. Running on both `push` and `pull_request` is also what
 # doubles every check on a branch that has an open PR.
+# `labeled`/`unlabeled` are included so that applying the `gate-change-approved`
+# label re-runs CI — that re-evaluates the Gate integrity job, which reads the
+# label, and lets a green run flow into auto-merge.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,6 +22,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Stops an agent from making CI green by deleting a test or loosening a gate
+  # instead of fixing the code. Rides the CI-success rail: if this fails, the
+  # whole run fails and auto-merge (gated on CI success) never fires. A deliberate
+  # gate change is approved by the owner adding the `gate-change-approved` label.
+  gate-integrity:
+    name: Gate integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Guard against weakened tests/gates
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          GATE_CHANGE_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'gate-change-approved') }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          scripts/gate-guard.sh "origin/$BASE_REF"
+
   check:
     name: Lint & test
     # Windows matches the dev environment and the cfg(windows) cmd-quoting path.
