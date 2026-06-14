@@ -36,7 +36,7 @@ The auto-merge job starts only after **every** CI job passes:
 | Check (CI job name) | What it enforces                                           |
 | ------------------- | ---------------------------------------------------------- |
 | `Lint & test`       | `cargo fmt --check`, `clippy -D warnings`, full test suite |
-| `Coverage`          | `cargo llvm-cov --fail-under-lines 75`                     |
+| `Coverage`          | `cargo llvm-cov --fail-under-lines 80`                     |
 | `Frontend`          | frontend `tsc`+`vite` build, Biome lint, Playwright e2e    |
 | `Desktop app`       | compiles the Tauri desktop shell + `clippy -D warnings`    |
 
@@ -44,10 +44,10 @@ The desktop shell lives outside the cargo workspace (WebView2 system deps), so t
 workspace `cargo test --workspace` deliberately doesn't touch it — the `Desktop app`
 job is what gates that crate so it can't silently stop compiling.
 
-The coverage bar is **75% line coverage**, measured across the workspace by
-`cargo-llvm-cov`. Baseline when the gate landed was ~79%; the 75% floor leaves a
-small buffer for churn. Raise it as coverage improves — bump `--fail-under-lines`
-in `.github/workflows/ci.yml` and update the table above.
+The coverage bar is **80% line coverage**, measured across the workspace by
+`cargo-llvm-cov`. Measured coverage is ~82%; the 80% floor leaves a small buffer
+for churn. Raise it as coverage improves — bump `--fail-under-lines` in
+`.github/workflows/ci.yml` and update the table above.
 
 ## One-time setup (recommended, but not required for the wait)
 

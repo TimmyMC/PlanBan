@@ -9,7 +9,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 ## Already in place (baseline)
 
 - ✅ `Lint & test` (cargo fmt/clippy `-D warnings`/test)
-- ✅ `Coverage` floor (`cargo-llvm-cov --fail-under-lines 75`)
+- ✅ `Coverage` floor (`cargo-llvm-cov --fail-under-lines 80`)
 - ✅ `Frontend` (tsc + Biome + Playwright) and a `Desktop app` build gate
 - ✅ Panic discipline in core (`unwrap_used`/`expect_used`/`dbg_macro` denied outside tests)
 - ✅ Trunk-based auto-merge gated on the full CI workflow
