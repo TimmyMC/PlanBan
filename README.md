@@ -151,10 +151,3 @@ Development is **trunk-based**: branch, open a PR, and it auto-merges once all f
 checks pass — see [`docs/trunk-based-development.md`](./docs/trunk-based-development.md).
 (For running the real GitHub workflow locally, [`act`](https://github.com/nektos/act)
 executes it in Docker.)
-
-## Roadmap
-
-Milestones 1–3 (headless command center, workflow engine, Tauri + React board) are in.
-Planned features and deferred work are tracked as
-[GitHub issues](https://github.com/TimmyMC/PlanBan/issues) — see the `roadmap` and
-`tech-debt` labels — rather than in this file.
