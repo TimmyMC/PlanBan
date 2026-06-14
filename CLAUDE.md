@@ -115,6 +115,31 @@ diverge by entry point.
 - Timestamps are stored as RFC3339 text and booleans as 0/1 integers in SQLite, mapped to
   domain types in `db.rs`.
 
+**Test taxonomy — where a new test belongs, and which gate fails without it.** Full version in
+[`docs/testing.md`](docs/testing.md); the short map:
+
+| Layer | Lives in | Tooling |
+| --- | --- | --- |
+| CLI use-case docs | `crates/cli/tests/cmd/*.md` | `trycmd` snapshots |
+| CLI behavior tests | `crates/cli/tests/cli_blackbox.rs` | `assert_cmd` / `assert_fs` |
+| Engine unit tests | `crates/core/src/*.rs` `#[cfg(test)]` | std test |
+| Engine pipeline tests | `crates/core/tests/e2e.rs` | std test + temp git/SQLite |
+| Frontend component tests | `ui/src/**/*.test.ts(x)` | Vitest |
+| Frontend UX e2e *(priority)* | `ui/tests/*.spec.ts` | Playwright |
+| Fitness functions | `crates/core/tests/architecture.rs` + the coverage gates | std test / Vitest |
+
+Which gate reddens when a use case is added without a test:
+
+- New CLI command/flag, no row + test → `crates/cli/tests/use_case_coverage.rs` (walks the clap
+  tree; needs a [`docs/use-cases.md`](docs/use-cases.md) row naming a real `cli_blackbox::<fn>`).
+- New `Api` seam method or UX flow, no tagged spec → `ui/src/use-case-coverage.test.ts` (needs
+  an `@usecase:api/<method>` / `@usecase:flow/<id>` tag on a Playwright spec).
+- Vendor/UI/network dep or import leaks into core → `crates/core/tests/architecture.rs` (§7/§11).
+- Command output drifts → `trycmd` (`crates/cli/tests/cmd/*.md`).
+
+The **Gate guard** (below) is the meta-gate over all of these: it stops them being silently
+weakened to go green.
+
 ## Status / roadmap
 
 Milestones 1–2 are complete: the headless command center (sync, sessions, worktrees,

@@ -50,7 +50,10 @@ The system must be verifiable in seconds, headless, without the GUI. Slow or GUI
 verification is a defect.
 
 ### 9. Regressions are guarded by tests, not vigilance
-Untested behavior is considered broken. The strategy is layered:
+Untested behavior is considered broken. Coverage is *machine-enforced*, not remembered:
+deterministic gates fail the build when a use case is added without a test. The test taxonomy
+and the "which gate catches what" map live in [`docs/testing.md`](docs/testing.md). The
+strategy is layered:
 
 - **Black-box first.** Every user-facing use case has a test that drives the *compiled
   binary* — args/stdin in, exit code + stdout/stderr out — knowing nothing about the
@@ -62,8 +65,10 @@ Untested behavior is considered broken. The strategy is layered:
   rewritten freely (§7) and the tests still hold.
 - **Core unit/integration.** Engine logic (sync/divergence, templating, persistence, the
   M2 gate) is covered directly against temp SQLite and temp git repos, fully offline (§8).
-- **UI end-to-end.** When the GUI lands, comprehensive Playwright tests cover the user
-  flows, not just rendering.
+- **UI end-to-end (the priority frontend layer).** The GUI has shipped, so comprehensive
+  Playwright tests covering the user *flows* — not just rendering — are how frontend
+  correctness is asserted. A coverage gate fails the build if an `api` seam method or a listed
+  UX flow has no tagged e2e test (see `docs/testing.md`).
 
 Tests run on every commit; the trunk stays green (§12).
 
@@ -81,7 +86,7 @@ Extensibility and configurability are first-class design constraints — new ste
 integrations, and triggers must be addable without forking core.
 
 ### 12. Trunk-based development
-Work integrates into a single trunk (`master`) continuously. Branches are short-lived
+Work integrates into a single trunk (`trunk`) continuously. Branches are short-lived
 (hours to a day) and merge back fast; long-lived feature branches are not allowed — they
 defeat the rapid feedback loops of §8 and let drift accumulate against §11. The trunk is
 always releasable: every commit keeps the build green and the tests passing (§9).
