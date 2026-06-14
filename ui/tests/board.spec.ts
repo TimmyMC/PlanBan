@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
 // dnd-kit needs a real pointer drag past its activation distance, in steps.
@@ -15,7 +16,9 @@ async function dragCardToColumn(page: Page, cardId: string, colId: string) {
   await page.mouse.up();
 }
 
-test("renders columns, cards, and the divergence badge", async ({ page }) => {
+test("renders columns, cards, and the divergence badge", {
+  tag: ["@usecase:api/getBoard"],
+}, async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("col-To Do")).toBeVisible();
   await expect(page.getByTestId("col-In Progress")).toBeVisible();
@@ -27,7 +30,9 @@ test("renders columns, cards, and the divergence badge", async ({ page }) => {
   await expect(page.getByTestId("card-PROJ-44")).toContainText("diverged");
 });
 
-test("surfaces live session, git, and worktree state on a card", async ({ page }) => {
+test("surfaces live session, git, and worktree state on a card", {
+  tag: ["@usecase:api/getBoard"],
+}, async ({ page }) => {
   await page.goto("/");
   // PROJ-12 has a managed run, a dirty worktree 3 ahead — the overview's whole point.
   const proj12 = page.getByTestId("card-PROJ-12");
@@ -39,19 +44,34 @@ test("surfaces live session, git, and worktree state on a card", async ({ page }
   await expect(page.getByTestId("card-PROJ-31")).toContainText("external idle");
 });
 
-test("dragging a card to another column moves it", async ({ page }) => {
+test("clicking Sync re-fetches the board", { tag: ["@usecase:api/sync"] }, async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("col-To Do")).toBeVisible();
+  // exact, else it also matches a card whose summary contains "sync".
+  await page.getByRole("button", { name: "Sync", exact: true }).click();
+  // The board is still rendered after sync + the refresh it triggers.
+  await expect(page.getByTestId("card-PROJ-12")).toBeVisible();
+});
+
+test("dragging a card to another column moves it", {
+  tag: ["@usecase:api/move", "@usecase:flow/drag-to-move"],
+}, async ({ page }) => {
   await page.goto("/");
   await dragCardToColumn(page, "card-PROJ-58", "col-In Progress"); // starts in "To Do"
   await expect(page.getByTestId("col-In Progress")).toContainText("PROJ-58");
 });
 
-test("a gated move shows the override banner", async ({ page }) => {
+test("a gated move shows the override banner", {
+  tag: ["@usecase:api/move", "@usecase:flow/gated-move-banner"],
+}, async ({ page }) => {
   await page.goto("/");
   await dragCardToColumn(page, "card-PROJ-31", "col-Done"); // In Review -> Done is gated
   await expect(page.getByTestId("banner")).toContainText("Blocked moving PROJ-31");
 });
 
-test("override resumes a blocked move and clears the banner", async ({ page }) => {
+test("override resumes a blocked move and clears the banner", {
+  tag: ["@usecase:api/override", "@usecase:flow/override-resume"],
+}, async ({ page }) => {
   await page.goto("/");
   await dragCardToColumn(page, "card-PROJ-31", "col-Done");
   await expect(page.getByTestId("banner")).toBeVisible();
@@ -64,4 +84,11 @@ test("override resumes a blocked move and clears the banner", async ({ page }) =
   }).toPass();
 
   await expect(page.getByTestId("banner")).toHaveCount(0);
+});
+
+test("the board has no axe accessibility violations", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("col-To Do")).toBeVisible();
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
 });

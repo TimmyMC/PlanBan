@@ -8,12 +8,14 @@
   --foreground: 222 47% 11%;
   --card: 0 0% 100%;
   --muted: 214 30% 88%;
-  --muted-foreground: 215 16% 42%;
+  /* Darkened to clear WCAG AA (4.5:1) on the light badge/column tints —
+     enforced by the axe test in board.spec.ts. */
+  --muted-foreground: 215 22% 34%;
   --border: 214 30% 85%;
   --primary: 222 47% 24%;
   --primary-foreground: 210 40% 98%;
-  --destructive: 0 72% 48%;
-  --accent: 200 90% 38%;
+  --destructive: 0 74% 38%;
+  --accent: 200 95% 27%;
 }
 
 .dark {
