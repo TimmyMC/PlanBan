@@ -40,8 +40,10 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 
 - ⬜ **Diff coverage** — gate on changed-line coverage per PR (not just the global floor),
   and ratchet the global floor upward over time.
-- ⬜ **Frontend unit/component tests** — add Vitest (api seam, mock, board logic) with a
-  frontend coverage gate; add `axe-core` a11y assertions to the Playwright suite.
+- 🚧 **Frontend unit/component tests** — Vitest is wired (jsdom + Testing Library),
+  covering the `mockApi` seam and `IssueCard`, and runs in the `Frontend` CI job (`pnpm
+  test`). *Still to do:* a frontend coverage gate and `axe-core` a11y assertions in the
+  Playwright suite.
 - ⬜ **Mutation testing** — a scheduled (weekly) `cargo-mutants` run on `core` (too slow
   per-PR), surfaced as a report/issue. Validates that tests *catch* bugs, not just execute.
 - ⬜ **Secret scanning** — `gitleaks` in CI and pre-commit.
