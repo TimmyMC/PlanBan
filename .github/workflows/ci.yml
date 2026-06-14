@@ -20,7 +20,7 @@ jobs:
     # (Adding an ubuntu leg to exercise the sh path is tracked in BACKLOG.md.)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Pinned to match rust-toolchain.toml — bump both together.
       - name: Install Rust (rustfmt + clippy)
@@ -32,7 +32,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Set up Node (offline fake tracker in the black-box tests)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
@@ -49,7 +49,7 @@ jobs:
     name: coverage (>=75% lines)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust (+ llvm-tools)
         uses: dtolnay/rust-toolchain@1.96.0
@@ -63,7 +63,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Set up Node (offline fake tracker in the black-box tests)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
@@ -79,15 +79,15 @@ jobs:
       run:
         working-directory: ui
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9
           run_install: false
@@ -111,7 +111,7 @@ jobs:
     # is what actually gates the desktop shell: it must compile + pass clippy.
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust (clippy)
         uses: dtolnay/rust-toolchain@1.96.0
@@ -124,12 +124,12 @@ jobs:
           workspaces: src-tauri
 
       - name: Set up Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9
           run_install: false
@@ -151,7 +151,7 @@ jobs:
     # Windows-specific behavior, and it's cheaper/faster than a Windows runner.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@1.96.0
