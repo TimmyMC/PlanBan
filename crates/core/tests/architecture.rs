@@ -34,6 +34,13 @@ const FORBIDDEN_DEPS: &[&str] = &[
     "google-",
 ];
 
+/// Dependencies we deliberately migrated *off* and don't want creeping back in.
+/// Unlike [`FORBIDDEN_DEPS`] these are not §7/§11 violations — sqlx is a perfectly
+/// legitimate DB layer; we simply standardized on Diesel (#20). The ratchet exists
+/// so that choice can't be silently reverted (e.g. an agent re-adding sqlx "for one
+/// query", ending up with two DB layers). Changing it is a deliberate human decision.
+const RETIRED_DEPS: &[&str] = &["sqlx"];
+
 fn core_manifest() -> String {
     // Tests run with the crate root as the working directory.
     std::fs::read_to_string("Cargo.toml").expect("read clabby-core Cargo.toml")
@@ -98,6 +105,46 @@ fn core_source_imports_no_vendor_crate() {
     assert!(
         offenders.is_empty(),
         "Constitution §7/§11 violated: clabby-core imports a vendor/UI/network crate:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn core_does_not_reintroduce_retired_deps() {
+    // 1) No retired crate as a direct runtime dependency.
+    let manifest = core_manifest();
+    for line in runtime_dependency_lines(&manifest) {
+        let dep = line.split(['=', ' ']).next().unwrap_or("").trim();
+        for retired in RETIRED_DEPS {
+            assert!(
+                dep != *retired,
+                "core standardized on Diesel (#20); don't re-introduce `{dep}`. \
+                 If a second DB layer is genuinely needed, change this gate deliberately."
+            );
+        }
+    }
+
+    // 2) No `use sqlx::...` import sneaking in by another path.
+    let mut offenders = Vec::new();
+    visit_rs_files(Path::new("src"), &mut |path, contents| {
+        for line in contents.lines() {
+            let t = line.trim_start();
+            if !t.starts_with("use ") {
+                continue;
+            }
+            for retired in RETIRED_DEPS {
+                let needle = retired.replace('-', "_");
+                if t.starts_with(&format!("use {needle}"))
+                    || t.starts_with(&format!("use ::{needle}"))
+                {
+                    offenders.push(format!("{}: {t}", path.display()));
+                }
+            }
+        }
+    });
+    assert!(
+        offenders.is_empty(),
+        "core standardized on Diesel (#20); remove the retired import:\n{}",
         offenders.join("\n")
     );
 }

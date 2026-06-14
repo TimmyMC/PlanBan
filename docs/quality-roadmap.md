@@ -30,11 +30,12 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 
 ## Tier 1b — correctness, its own PR (bigger)
 
-- ⬜ **Compile-time SQL + migrations** — move `db.rs` from runtime `sqlx::query` to
-  `query!`/`query_as!` with a committed `.sqlx` offline cache (schema checked at build),
-  move the inline `CREATE TABLE` block into `migrations/`, and add a CI step that fails if
-  the offline cache is stale. Turns schema drift from a runtime error into a build error.
-  (Tracked as issue #20.)
+- ✅ **Compile-time SQL + migrations** (#20) — moved `db.rs` onto **Diesel**: queries are
+  checked at build time against `crates/core/src/schema.rs`, and the inline `CREATE TABLE`
+  block became versioned migrations in `crates/core/migrations/`. Diesel was chosen over
+  sqlx's `query!` macros specifically to avoid sqlx's weak SQLite nullability inference (the
+  per-column `AS "col!"` override tax) — and it needs **no `.sqlx` offline cache**, so there's
+  nothing to keep in sync and no CI staleness step. Schema drift is now a compile error.
 
 ## Tier 2 — test depth (coverage ≠ confidence)
 

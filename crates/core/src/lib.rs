@@ -25,6 +25,7 @@ pub mod jsonpath;
 pub mod model;
 pub mod overview;
 pub mod runner;
+mod schema;
 pub mod session;
 pub mod sync;
 pub mod template;

@@ -6,7 +6,10 @@ license.workspace = true
 
 [dependencies]
 tokio = { workspace = true }
-sqlx = { workspace = true }
+diesel = { workspace = true }
+diesel-async = { workspace = true }
+diesel_migrations = { workspace = true }
+libsqlite3-sys = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

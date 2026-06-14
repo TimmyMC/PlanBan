@@ -15,7 +15,10 @@ pub enum Error {
     Toml(#[from] toml::de::Error),
 
     #[error("database error: {0}")]
-    Db(#[from] sqlx::Error),
+    Db(#[from] diesel::result::Error),
+
+    #[error("database migration error: {0}")]
+    Migration(String),
 
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
