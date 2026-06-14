@@ -182,7 +182,17 @@ fn worktree_add_then_list() {
     init_git(tmp.path());
     clabby()
         .current_dir(tmp.path())
-        .args(["worktree", "add", "PROJ-12", "--branch", "feature/PROJ-12"])
+        .args([
+            "worktree",
+            "add",
+            "PROJ-12", //
+            "--branch",
+            "feature/PROJ-12", //
+            "--base",
+            "HEAD", //
+            "--path",
+            "wt-custom",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains("feature/PROJ-12"));
@@ -192,6 +202,96 @@ fn worktree_add_then_list() {
         .assert()
         .success()
         .stdout(predicate::str::contains("PROJ-12"));
+}
+
+// ---- observe / inspect use cases (attach, logs tail, status --watch) --------
+
+#[test]
+fn external_session_attaches_and_lists() {
+    let tmp = project();
+    clabby()
+        .current_dir(tmp.path())
+        .arg("sync")
+        .assert()
+        .success();
+    clabby()
+        .current_dir(tmp.path())
+        .args([
+            "session",
+            "attach",
+            "PROJ-12", //
+            "--worktree",
+            "wt/PROJ-12", //
+            "--branch",
+            "feature/PROJ-12", //
+            "--log",
+            "session.log",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("Attached external session")
+                .and(predicate::str::contains("PROJ-12")),
+        );
+    clabby()
+        .current_dir(tmp.path())
+        .args(["session", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("external").and(predicate::str::contains("PROJ-12")));
+}
+
+#[test]
+fn logs_tail_shows_a_managed_sessions_output() {
+    let tmp = project();
+    clabby()
+        .current_dir(tmp.path())
+        .arg("sync")
+        .assert()
+        .success();
+    clabby()
+        .current_dir(tmp.path())
+        .args(["session", "spawn", "PROJ-12", "--agent", "echo"])
+        .assert()
+        .success();
+    // The first session in a fresh db has id 1; the echo agent logged a line.
+    clabby()
+        .current_dir(tmp.path())
+        .args(["logs", "tail", "1", "--lines", "10"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ran agent for PROJ-12"));
+}
+
+#[test]
+fn status_watch_starts_and_keeps_running() {
+    use std::process::{Command as PCommand, Stdio};
+    use std::time::Duration;
+
+    let tmp = project();
+    clabby()
+        .current_dir(tmp.path())
+        .arg("sync")
+        .assert()
+        .success();
+
+    // `--watch` loops until interrupted, so drive it directly: it must still be
+    // running after a moment (proves the watch loop started and didn't crash).
+    let mut child = PCommand::new(assert_cmd::cargo::cargo_bin("clabby"))
+        .current_dir(tmp.path())
+        .args(["status", "--watch"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(800));
+    let still_running = child.try_wait().unwrap().is_none();
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(
+        still_running,
+        "status --watch should keep running until interrupted"
+    );
 }
 
 // ---- M2: transitions (gate-with-override) -----------------------------------
