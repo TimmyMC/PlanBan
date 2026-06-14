@@ -16,14 +16,19 @@
 
 use std::path::Path;
 
+use std::future::Future;
+use std::pin::Pin;
+
 use chrono::{DateTime, Utc};
+use diesel::connection::SimpleConnection;
 use diesel::prelude::*;
+use diesel::result::{ConnectionError, ConnectionResult};
 use diesel::sqlite::SqliteConnection;
 use diesel::upsert::excluded;
 use diesel_async::pooled_connection::deadpool::{Object, Pool};
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use diesel_async::pooled_connection::{AsyncDieselConnectionManager, ManagerConfig};
 use diesel_async::sync_connection_wrapper::SyncConnectionWrapper;
-use diesel_async::RunQueryDsl;
+use diesel_async::{AsyncConnection, RunQueryDsl, SimpleAsyncConnection};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 use crate::model::{
@@ -37,6 +42,15 @@ use crate::schema::{
 use crate::{Error, Result};
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
+
+/// Per-connection setup. `busy_timeout` is the load-bearing one: SQLite allows a
+/// single writer, so without it a write that races another (e.g. session-log
+/// streaming during a `sync`) fails immediately with `SQLITE_BUSY` instead of
+/// waiting — this restores the 5s wait sqlx applied by default. WAL lets readers
+/// run concurrently with the writer; `foreign_keys` is belt-and-suspenders.
+const CONNECTION_PRAGMAS: &str = "PRAGMA busy_timeout = 5000; \
+     PRAGMA journal_mode = WAL; \
+     PRAGMA foreign_keys = ON;";
 
 /// The async connection type: the sync SQLite driver wrapped so queries `.await`
 /// (each runs on `spawn_blocking`).
@@ -247,13 +261,24 @@ impl Db {
                 std::fs::create_dir_all(parent)?;
             }
         }
-        let url = path.to_string_lossy().into_owned();
+        // Diesel's connection URL is a `&str`; a non-UTF-8 path is a hard error
+        // rather than a silently lossy (and thus wrong) filename.
+        let url = path
+            .to_str()
+            .ok_or_else(|| Error::other(format!("non-UTF-8 database path: {}", path.display())))?
+            .to_owned();
 
         // Migrations run on a one-off *sync* connection (the harness is sync),
         // before the async pool is built — every caller gets the schema applied.
-        run_migrations(&url)?;
+        // Off the runtime via `spawn_blocking` so we don't stall a worker thread.
+        let migrate_url = url.clone();
+        tokio::task::spawn_blocking(move || run_migrations(&migrate_url))
+            .await
+            .map_err(|e| Error::other(format!("migration task panicked: {e}")))??;
 
-        let manager = AsyncDieselConnectionManager::<AsyncConn>::new(url);
+        let mut config: ManagerConfig<AsyncConn> = ManagerConfig::default();
+        config.custom_setup = Box::new(|url| setup_connection(url));
+        let manager = AsyncDieselConnectionManager::<AsyncConn>::new_with_config(url, config);
         let pool = Pool::builder(manager)
             .build()
             .map_err(|e| Error::other(format!("db pool build: {e}")))?;
@@ -694,12 +719,30 @@ impl Db {
     }
 }
 
-/// Run pending migrations on a one-off synchronous connection.
+/// Run pending migrations on a one-off synchronous connection (WAL is a
+/// persistent DB setting, so applying it here also sets it for the file).
 fn run_migrations(url: &str) -> Result<()> {
     let mut conn = SqliteConnection::establish(url).map_err(|e| Error::Migration(e.to_string()))?;
+    conn.batch_execute(CONNECTION_PRAGMAS)
+        .map_err(|e| Error::Migration(e.to_string()))?;
     conn.run_pending_migrations(MIGRATIONS)
         .map_err(|e| Error::Migration(e.to_string()))?;
     Ok(())
+}
+
+/// Establish a pooled async connection with the per-connection PRAGMAs applied
+/// (notably `busy_timeout`, which must be set on every connection).
+fn setup_connection(
+    url: &str,
+) -> Pin<Box<dyn Future<Output = ConnectionResult<AsyncConn>> + Send>> {
+    let url = url.to_owned();
+    Box::pin(async move {
+        let mut conn = AsyncConn::establish(&url).await?;
+        conn.batch_execute(CONNECTION_PRAGMAS)
+            .await
+            .map_err(ConnectionError::CouldntSetupConfiguration)?;
+        Ok(conn)
+    })
 }
 
 // ---- row -> model mappers ---------------------------------------------------

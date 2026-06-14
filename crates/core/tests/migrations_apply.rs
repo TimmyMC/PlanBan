@@ -10,6 +10,48 @@ use clabby_core::model::{
     Issue, SessionKind, SessionStatus, StepStatus, TransitionStatus, Worktree,
 };
 
+/// Concurrent writers must not fail with `SQLITE_BUSY`: SQLite has one writer, so
+/// the pool's `busy_timeout` is what makes overlapping writes wait rather than
+/// error (the regression a naive Diesel pool would reintroduce). Many tasks
+/// stream logs at once here, like managed sessions do in production.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_writes_wait_instead_of_erroring() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db = Db::connect(tmp.path().join("clabby.db")).await.unwrap();
+    db.upsert_issue(&Issue::new("K-1", "s", "todo"))
+        .await
+        .unwrap();
+    let session = db
+        .insert_session(NewSession {
+            issue_key: "K-1",
+            kind: SessionKind::Managed,
+            pid: None,
+            worktree_path: None,
+            branch: None,
+            agent: None,
+            status: SessionStatus::Running,
+            log_path: None,
+        })
+        .await
+        .unwrap();
+
+    let mut handles = Vec::new();
+    for i in 0..50 {
+        let db = db.clone();
+        let sid = session.id;
+        handles.push(tokio::spawn(async move {
+            db.insert_log(sid, "stdout", &format!("line {i}"), Utc::now())
+                .await
+        }));
+    }
+    for h in handles {
+        h.await
+            .unwrap()
+            .expect("concurrent insert_log must not hit SQLITE_BUSY");
+    }
+    assert_eq!(db.tail_logs(session.id, 100).await.unwrap().len(), 50);
+}
+
 #[tokio::test]
 async fn migrations_apply_and_every_table_round_trips() {
     let tmp = tempfile::tempdir().unwrap();
