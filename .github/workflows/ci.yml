@@ -112,8 +112,8 @@ jobs:
       - name: Lint · format (Biome)
         run: pnpm run lint
 
-      - name: Unit tests (Vitest)
-        run: pnpm test
+      - name: Unit tests + coverage (Vitest)
+        run: pnpm test:cov
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium

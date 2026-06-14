@@ -7,7 +7,7 @@ use clabby_core::overview::OverviewRow;
 
 fn pad(s: &str, w: usize) -> String {
     let len = s.chars().count();
-    if len >= w {
+    if len > w {
         // truncate with an ellipsis so columns stay aligned
         if w <= 1 {
             s.chars().take(w).collect()
@@ -132,4 +132,76 @@ pub fn overview_table(rows: &[OverviewRow]) -> String {
         diverged
     ));
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use clabby_core::model::SessionStatus;
+
+    fn session(kind: SessionKind, status: SessionStatus) -> Session {
+        Session {
+            id: 1,
+            issue_key: "K".into(),
+            kind,
+            pid: None,
+            worktree_path: None,
+            branch: None,
+            agent: None,
+            status,
+            log_path: None,
+            exit_code: None,
+            started_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn pad_pads_truncates_and_handles_tiny_widths() {
+        assert_eq!(pad("ab", 4), "ab  "); // pad right
+        assert_eq!(pad("abcd", 4), "abcd"); // exact fit
+        assert_eq!(pad("abcdef", 4), "abc~"); // truncate + ellipsis
+        assert_eq!(pad("abc", 1), "a"); // w <= 1: hard cut, no ellipsis
+    }
+
+    #[test]
+    fn session_cell_summarizes_latest_plus_extra_count() {
+        assert_eq!(session_cell(&[]), "-");
+        assert_eq!(
+            session_cell(&[session(SessionKind::Managed, SessionStatus::Running)]),
+            "running (mgd)"
+        );
+        let two = [
+            session(SessionKind::Managed, SessionStatus::Exited),
+            session(SessionKind::External, SessionStatus::Idle),
+        ];
+        assert_eq!(session_cell(&two), "idle (ext) +1");
+    }
+
+    #[test]
+    fn git_cell_renders_clean_and_combined_states() {
+        assert_eq!(git_cell(&None), "-");
+        assert_eq!(git_cell(&Some(GitState::default())), "clean");
+        let g = GitState {
+            ahead: 3,
+            behind: 2,
+            dirty: true,
+            ..Default::default()
+        };
+        assert_eq!(git_cell(&Some(g)), "+3 ahead, -2 behind, dirty");
+    }
+
+    #[test]
+    fn worktree_cell_shows_basename_or_dash() {
+        assert_eq!(worktree_cell(&None), "-");
+        assert_eq!(worktree_cell(&Some("wt/PROJ-12".to_string())), "PROJ-12");
+    }
+
+    #[test]
+    fn overview_table_handles_no_issues() {
+        let t = overview_table(&[]);
+        assert!(t.contains("ISSUE"));
+        assert!(t.contains("no issues"));
+    }
 }
