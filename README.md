@@ -154,13 +154,7 @@ executes it in Docker.)
 
 ## Roadmap
 
-- ✅ **M1 — headless command center** (sync, sessions, worktrees, overview, cron).
-- ✅ **M2 — deterministic workflow engine:** gated `move`/`override`, with override
-  reasons logged for debugging.
-- 🚧 **M3 — Tauri + React board:** the desktop shell (real-time `EventBus` push) and a
-  dnd-kit board — drag-to-transition, divergence flags, live session/git/worktree
-  badges — under a Playwright suite. CI-gated by the `tauri shell` and `build · e2e` jobs.
-- **Future — `clabby init --from-jira`:** bootstrap config from a live instance's
-  custom statuses and labels.
-
-See [`BACKLOG.md`](./BACKLOG.md) for consciously deferred work.
+Milestones 1–3 (headless command center, workflow engine, Tauri + React board) are in.
+Planned features and deferred work are tracked as
+[GitHub issues](https://github.com/TimmyMC/PlanBan/issues) — see the `roadmap` and
+`tech-debt` labels — rather than in this file.
