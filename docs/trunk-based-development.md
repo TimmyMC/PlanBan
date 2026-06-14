@@ -19,6 +19,9 @@ From there it's hands-off: CI runs on the PR, and `.github/workflows/automerge.y
 **waits for the whole CI workflow to succeed, then squash-merges the PR and deletes
 the branch**. If any job fails, the PR just sits until you push a fix.
 
+To **hold** a PR for human review, add the `do-not-merge` label — CI still runs, but
+auto-merge skips it until you remove the label (the human-in-the-loop escape hatch, §1).
+
 > **Why gate on the CI workflow, not GitHub "auto-merge"?** GitHub's native
 > auto-merge only waits for checks that *branch protection* lists as required — so
 > if protection isn't set up (or is set up after the fact), a PR can merge *before
