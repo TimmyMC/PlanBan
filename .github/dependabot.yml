@@ -29,3 +29,9 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    ignore:
+      # dtolnay/rust-toolchain tags are Rust *channels* (1.96.0, …), not action
+      # releases. The Rust version is pinned deliberately in rust-toolchain.toml
+      # and bumped by hand, so don't let Dependabot propose it here — it
+      # mis-reads the tags and suggests non-existent versions (e.g. 1.100.0).
+      - dependency-name: dtolnay/rust-toolchain
