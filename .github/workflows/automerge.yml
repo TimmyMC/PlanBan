@@ -7,7 +7,7 @@ name: Auto-merge
 # auto-merge only waits for checks when branch protection lists them as
 # required, so if protection isn't configured (or configured later) a PR can
 # merge *before checks finish*. Gating on `workflow_run` of CI means every job
-# in CI — check, coverage, build·e2e, tauri shell — must already be green
+# in CI — Lint & test, Coverage, Frontend, Desktop app — must already be green
 # before this job can even start. No ordering footgun, no settings dependency.
 #
 # Branch protection (scripts/setup-branch-protection.sh) is still recommended
