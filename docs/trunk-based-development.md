@@ -36,6 +36,7 @@ The auto-merge job starts only after **every** CI job passes:
 | `coverage (>=75% lines)`  | `cargo llvm-cov --fail-under-lines 75`                     |
 | `build · e2e`             | frontend `tsc`+`vite` build, Biome lint, Playwright e2e    |
 | `tauri shell`             | compiles the Tauri desktop shell + `clippy -D warnings`    |
+| `supply-chain (cargo-deny)` | RUSTSEC advisories, license allow-list, banned/wildcard deps |
 
 The Tauri shell lives outside the cargo workspace (WebView2 system deps), so the
 workspace `cargo test --workspace` deliberately doesn't touch it — the `tauri shell`

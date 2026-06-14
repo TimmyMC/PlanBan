@@ -35,9 +35,21 @@ The pre-commit hook (`scripts/hooks/pre-commit`, enabled via `core.hooksPath`) r
 re-staging anything it reformats — so the CI fmt/lint gates never fail on formatting alone.
 
 **Trunk-based development.** `trunk` is the protected default branch — don't push to it
-directly. Branch off, open a PR, and it auto-merges once CI is green (fmt/clippy/test,
-≥75% line coverage via `cargo llvm-cov`, frontend build/lint/e2e). See
-[`docs/trunk-based-development.md`](docs/trunk-based-development.md).
+directly. Branch off, open a PR, and it auto-merges once CI is green. CI gates:
+`fmt · clippy · test`, `coverage (>=75% lines)`, `build · e2e`, `tauri shell`, and
+`supply-chain (cargo-deny)`. See [`docs/trunk-based-development.md`](docs/trunk-based-development.md)
+and the broader plan in [`docs/quality-roadmap.md`](docs/quality-roadmap.md).
+
+**Quality gates worth knowing.** The toolchain is pinned in `rust-toolchain.toml` (bump it
+*and* the `dtolnay/rust-toolchain@<ver>` refs in `ci.yml` together). `cargo deny check`
+(policy in `deny.toml`) gates advisories/licenses/bans. `crates/core/tests/architecture.rs`
+is a fitness function that fails if `clabby-core` gains a UI/vendor/network dependency or
+import (Constitution §7/§11) — if you're tempted to add one to core, it belongs in a
+command template or driver instead.
+
+**Skills & self-improvement.** Reusable, repo-specific know-how lives in `.claude/skills/`;
+a `SessionStart` hook lists them each session. When you solve something non-obvious that
+will recur, capture it via the `self-improve` skill (add/update a `SKILL.md`).
 
 Lints: crate roots set `#![warn(clippy::all)]` with the doc/style nags allowed; CI runs
 `clippy -D warnings`. Don't enable `clippy::pedantic` broadly — it's high-noise; the

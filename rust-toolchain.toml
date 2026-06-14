@@ -1,0 +1,6 @@
+# Pin the toolchain so local dev and CI build the same compiler/clippy. Bumping
+# this is a deliberate PR (CI's dtolnay/rust-toolchain ref must match the channel).
+[toolchain]
+channel = "1.96.0"
+components = ["rustfmt", "clippy", "llvm-tools-preview"]
+profile = "minimal"
