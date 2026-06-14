@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS step_runs;
+DROP TABLE IF EXISTS transition_runs;
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS cron_runs;
+DROP TABLE IF EXISTS sync_log;
+DROP TABLE IF EXISTS session_logs;
+DROP TABLE IF EXISTS worktrees;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS issues;

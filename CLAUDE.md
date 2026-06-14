@@ -23,6 +23,11 @@ cargo build --bin clabby          # build just the CLI
 # Regenerate the trycmd living-doc snapshots after an intentional CLI output change:
 $env:TRYCMD="overwrite"; cargo test -p clabby --test cli_docs   # PowerShell
 
+# DB schema lives in crates/core/migrations/. After adding/editing a migration, keep
+# crates/core/src/schema.rs in sync (queries are checked against it at build time):
+#   cargo install diesel_cli --no-default-features --features sqlite   # one-time
+#   $env:DATABASE_URL="sqlite://dev.db"; diesel migration run; diesel print-schema > crates/core/src/schema.rs
+
 # Run the full CI gate locally before pushing (fmt + clippy -D warnings + test):
 ./scripts/ci.ps1                  # or ./scripts/ci.sh, or `just`
 
@@ -63,11 +68,11 @@ will recur, capture it via the `self-improve` skill (add/update a `SKILL.md`).
 Lints: crate roots set `#![warn(clippy::all)]` with the doc/style nags allowed; CI runs
 `clippy -D warnings`. Don't enable `clippy::pedantic` broadly — it's high-noise; the
 allows in `lib.rs`/`main.rs` keep it opt-in if individual pedantic lints are wanted later.
-Deferred work (incl. moving sqlx to compile-time `query!`) is tracked as GitHub issues
-(labels `roadmap` / `tech-debt`), not in-repo.
+Deferred work is tracked as GitHub issues (labels `roadmap` / `tech-debt`), not in-repo.
 
 The Rust toolchain is MSVC (`stable-x86_64-pc-windows-msvc`); the build compiles a
-vendored SQLite via `sqlx`, so a C toolchain (VS Build Tools) is required. Node.js is
+vendored SQLite via `diesel`/`libsqlite3-sys` (`bundled`), so a C toolchain (VS Build
+Tools) is required. Node.js is
 needed only to run the offline example tracker (`examples/tracker.mjs`).
 
 Run the CLI against an example without installing:
@@ -90,7 +95,8 @@ and §11 (generic core, workflow in config):
     `cmd /C "<line>"` with the whole line wrapped in one quote pair (see `shell()`); this
     is load-bearing for preserving quoted args with spaces — there's a regression test.
   - `session.rs` — hybrid sessions: `run_managed` (spawn + stream) and `attach` (observe).
-  - `git.rs`, `db.rs` (sqlx/SQLite, runtime queries — no compile-time `query!` macros),
+  - `git.rs`, `db.rs` (Diesel/SQLite, compile-time-checked queries against `schema.rs`;
+    schema lives in versioned `crates/core/migrations/`, applied on connect),
     `template.rs` (minijinja), `jsonpath.rs` (reads issues out of arbitrary tracker JSON),
     `overview.rs`, `events.rs`.
 - **`crates/cli` (`clabby`)** — a thin driver over core: `clap` commands + a live log
