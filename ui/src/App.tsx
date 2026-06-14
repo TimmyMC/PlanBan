@@ -69,8 +69,13 @@ export default function App() {
       </header>
 
       {banner && (
-        <div
+        <section
           data-testid="banner"
+          // A named <section> is implicitly a `region` landmark: keeps the
+          // banner's text inside a landmark (axe `region`) and announces the
+          // blocked move to screen readers when it appears.
+          aria-label="Blocked move"
+          aria-live="assertive"
           className="flex items-center justify-between gap-4 border-b border-destructive/40 bg-destructive/20 px-4 py-2 text-sm"
         >
           <span>{banner.text}</span>
@@ -78,11 +83,14 @@ export default function App() {
             type="button"
             data-testid="override"
             onClick={onOverride}
-            className="rounded bg-destructive px-2 py-1 text-xs font-medium text-foreground"
+            // Light text on the solid `bg-destructive` red — `text-foreground`
+            // here is near-black (2.41:1, fails WCAG AA); the axe banner-state
+            // scan guards this.
+            className="rounded bg-destructive px-2 py-1 text-xs font-medium text-primary-foreground"
           >
             Override &amp; resume
           </button>
-        </div>
+        </section>
       )}
 
       <main className="flex-1 overflow-auto">

@@ -12,11 +12,41 @@ const specs = readdirSync(SPEC_DIR)
   .map((f) => readFileSync(path.join(SPEC_DIR, f), "utf8"))
   .join("\n");
 
+// Extract the `interface Api { … }` body by brace-matching, not a non-greedy
+// regex. A `}` inside a return type (e.g. `Promise<{ … }>`) would let `/\n}/`
+// stop early and silently drop later methods — a *false green*. Brace counting
+// throws on imbalance instead, so a parse failure reddens CI loudly.
+function apiInterfaceBody(src: string): string {
+  const start = src.indexOf("interface Api");
+  if (start === -1) throw new Error("interface Api not found in src/api/index.ts");
+  const open = src.indexOf("{", start);
+  if (open === -1) throw new Error("interface Api has no opening brace");
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) return src.slice(open + 1, i);
+  }
+  throw new Error("interface Api has unbalanced braces");
+}
+
+// Method names declared at the *top level* of the interface body. Tracking brace
+// depth skips identifiers nested in type literals (`Promise<{ fetched: … }>`), so
+// only real `name(` signatures count.
+function topLevelMethods(body: string): string[] {
+  const methods: string[] = [];
+  let depth = 0;
+  for (const m of body.matchAll(/([A-Za-z_]\w*)\s*\(|\{|\}/g)) {
+    if (m[0] === "{") depth++;
+    else if (m[0] === "}") depth--;
+    else if (depth === 0) methods.push(m[1]);
+  }
+  return methods;
+}
+
 describe("UI use-case coverage", () => {
   it("every Api method has a @usecase:api/<method> Playwright test", () => {
     const src = readFileSync("src/api/index.ts", "utf8");
-    const body = src.match(/interface Api \{([\s\S]*?)\n\}/)?.[1] ?? "";
-    const methods = [...body.matchAll(/^\s*(\w+)\s*\(/gm)].map((m) => m[1]);
+    const methods = topLevelMethods(apiInterfaceBody(src));
     expect(methods.length, "could not parse the Api interface").toBeGreaterThan(0);
 
     const missing = methods.filter((m) => !specs.includes(`@usecase:api/${m}`));
