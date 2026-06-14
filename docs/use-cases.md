@@ -62,3 +62,4 @@ flow to the product without adding it here is a review responsibility.
 | `flow/drag-to-move` | `board.spec.ts` |
 | `flow/gated-move-banner` | `board.spec.ts` |
 | `flow/override-resume` | `board.spec.ts` |
+| `flow/a11y-board` | `board.spec.ts` |

@@ -86,9 +86,30 @@ test("override resumes a blocked move and clears the banner", {
   await expect(page.getByTestId("banner")).toHaveCount(0);
 });
 
-test("the board has no axe accessibility violations", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByTestId("col-To Do")).toBeVisible();
+async function expectNoAxeViolations(page: Page) {
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
+}
+
+// a11y is asserted across the *conditional* states, not just the resting board:
+// the override banner is the only place `--destructive`/`--accent` actually
+// render, so a resting-only scan would never see those tokens.
+test("no axe violations in resting, gated-banner, or post-override states", {
+  tag: ["@usecase:flow/a11y-board"],
+}, async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("col-To Do")).toBeVisible();
+  await expectNoAxeViolations(page); // resting board
+
+  await dragCardToColumn(page, "card-PROJ-31", "col-Done"); // In Review -> Done is gated
+  await expect(page.getByTestId("banner")).toBeVisible();
+  await expectNoAxeViolations(page); // override banner visible
+
+  // dnd-kit swallows the first post-drag click — retry until the override lands.
+  await expect(async () => {
+    await page.getByTestId("override").click();
+    await expect(page.getByTestId("col-Done")).toContainText("PROJ-31", { timeout: 1000 });
+  }).toPass();
+  await expect(page.getByTestId("banner")).toHaveCount(0);
+  await expectNoAxeViolations(page); // after the move resolved
 });
