@@ -1,7 +1,11 @@
 name: CI
 
+# PRs only. Trunk changes exclusively via auto-merged PRs whose CI already
+# passed, and the ruleset requires branches be up to date before merging (so the
+# merged result was tested) — a post-merge `push` run on trunk would just be a
+# redundant re-run. Running on both `push` and `pull_request` is also what
+# doubles every check on a branch that has an open PR.
 on:
-  push:
   pull_request:
 
 env:
