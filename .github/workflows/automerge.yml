@@ -7,7 +7,7 @@ name: Auto-merge
 # auto-merge only waits for checks when branch protection lists them as
 # required, so if protection isn't configured (or configured later) a PR can
 # merge *before checks finish*. Gating on `workflow_run` of CI means every job
-# in CI — check, coverage, build·e2e, tauri shell — must already be green
+# in CI — Lint & test, Coverage, Frontend, Desktop app — must already be green
 # before this job can even start. No ordering footgun, no settings dependency.
 #
 # Branch protection (scripts/setup-branch-protection.sh) is still recommended
@@ -41,10 +41,12 @@ jobs:
         run: |
           # The PR whose head is exactly the commit CI just validated. Restrict
           # to non-draft PRs authored by the owner or Dependabot; anything else
-          # waits for a human to merge. Empty result => nothing to do.
+          # waits for a human to merge. (Dependabot's login comes back as
+          # `app/dependabot` here, so match on a substring, not equality.)
+          # Empty result => nothing to do.
           pr=$(gh pr list --state open --limit 100 \
                  --json number,headRefOid,isDraft,author \
-                 --jq "[.[] | select(.headRefOid==\"$SHA\" and .isDraft==false and (.author.login==\"$OWNER\" or .author.login==\"dependabot[bot]\"))][0].number")
+                 --jq "[.[] | select(.headRefOid==\"$SHA\" and .isDraft==false and (.author.login==\"$OWNER\" or (.author.login | ascii_downcase | contains(\"dependabot\"))))][0].number")
           if [ -z "$pr" ]; then
             echo "No matching open PR for $SHA; nothing to merge."
             exit 0

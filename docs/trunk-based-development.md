@@ -30,16 +30,15 @@ the branch**. If any job fails, the PR just sits until you push a fix.
 
 The auto-merge job starts only after **every** CI job passes:
 
-| Check (CI job name)       | What it enforces                                            |
-| ------------------------- | ---------------------------------------------------------- |
-| `fmt · clippy · test`     | `cargo fmt --check`, `clippy -D warnings`, full test suite |
-| `coverage (>=75% lines)`  | `cargo llvm-cov --fail-under-lines 75`                     |
-| `build · e2e`             | frontend `tsc`+`vite` build, Biome lint, Playwright e2e    |
-| `tauri shell`             | compiles the Tauri desktop shell + `clippy -D warnings`    |
-| `supply-chain (cargo-deny)` | RUSTSEC advisories, license allow-list, banned/wildcard deps |
+| Check (CI job name) | What it enforces                                           |
+| ------------------- | ---------------------------------------------------------- |
+| `Lint & test`       | `cargo fmt --check`, `clippy -D warnings`, full test suite |
+| `Coverage`          | `cargo llvm-cov --fail-under-lines 75`                     |
+| `Frontend`          | frontend `tsc`+`vite` build, Biome lint, Playwright e2e    |
+| `Desktop app`       | compiles the Tauri desktop shell + `clippy -D warnings`    |
 
-The Tauri shell lives outside the cargo workspace (WebView2 system deps), so the
-workspace `cargo test --workspace` deliberately doesn't touch it — the `tauri shell`
+The desktop shell lives outside the cargo workspace (WebView2 system deps), so the
+workspace `cargo test --workspace` deliberately doesn't touch it — the `Desktop app`
 job is what gates that crate so it can't silently stop compiling.
 
 The coverage bar is **75% line coverage**, measured across the workspace by

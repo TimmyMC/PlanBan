@@ -33,11 +33,10 @@ gh api -X PUT "repos/$REPO/branches/trunk/protection" --input - >/dev/null <<'JS
   "required_status_checks": {
     "strict": true,
     "contexts": [
-      "fmt · clippy · test",
-      "coverage (>=75% lines)",
-      "build · e2e",
-      "tauri shell",
-      "supply-chain (cargo-deny)"
+      "Lint & test",
+      "Coverage",
+      "Frontend",
+      "Desktop app"
     ]
   },
   "enforce_admins": false,
