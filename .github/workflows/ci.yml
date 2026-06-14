@@ -20,7 +20,7 @@ jobs:
     # (Adding an ubuntu leg to exercise the sh path is tracked in BACKLOG.md.)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Pinned to match rust-toolchain.toml — bump both together.
       - name: Install Rust (rustfmt + clippy)
@@ -49,7 +49,7 @@ jobs:
     name: coverage (>=75% lines)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust (+ llvm-tools)
         uses: dtolnay/rust-toolchain@1.96.0
@@ -79,7 +79,7 @@ jobs:
       run:
         working-directory: ui
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
@@ -111,7 +111,7 @@ jobs:
     # is what actually gates the desktop shell: it must compile + pass clippy.
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust (clippy)
         uses: dtolnay/rust-toolchain@1.96.0
@@ -151,7 +151,7 @@ jobs:
     # Windows-specific behavior, and it's cheaper/faster than a Windows runner.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@1.96.0
