@@ -22,6 +22,14 @@ the branch**. If any job fails, the PR just sits until you push a fix.
 To **hold** a PR for human review, add the `do-not-merge` label — CI still runs, but
 auto-merge skips it until you remove the label (the human-in-the-loop escape hatch, §1).
 
+**Staleness is automatic too.** The ruleset is strict (a PR must be up to date with
+trunk to merge), so when trunk advances `.github/workflows/auto-update-prs.yml` updates
+every open, conflict-free PR and re-runs its CI — PRs merge in a self-healing cascade.
+The only things that need a human are a **conflict** or a **CI failure**. This needs a
+`AUTOMERGE_PAT` secret (a branch update by the default token wouldn't re-trigger CI);
+without it the workflow no-ops. Stale *running* CI is cancelled by `ci.yml`'s
+`concurrency` block.
+
 > **Why gate on the CI workflow, not GitHub "auto-merge"?** GitHub's native
 > auto-merge only waits for checks that *branch protection* lists as required — so
 > if protection isn't set up (or is set up after the fact), a PR can merge *before

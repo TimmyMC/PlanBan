@@ -1,0 +1,62 @@
+name: Auto-update PRs
+
+# When trunk advances, bring every open, non-draft, conflict-free PR up to date
+# with it so its CI re-runs against the latest trunk. With the strict ruleset and
+# the auto-merge workflow, this means a PR only needs a human when it has a real
+# **conflict** or its **CI fails** — staleness ("behind") is handled automatically,
+# and PRs effectively merge in a self-healing cascade (one merges → trunk moves →
+# the next updates → re-tests → merges).
+#
+# Why a PAT, not GITHUB_TOKEN: a branch update pushed by the default GITHUB_TOKEN
+# does NOT re-trigger the PR's `pull_request` CI (GitHub's recursion guard), so CI
+# would never re-run. AUTOMERGE_PAT (a PAT with contents + pull-requests write)
+# makes the update look like a real push. If the secret is unset, this no-ops with
+# a warning. (Stale *running* CI is cancelled separately by the `concurrency` block
+# in ci.yml.)
+
+on:
+  push:
+    branches: [trunk]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: auto-update-prs
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update behind PRs to the latest trunk
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::AUTOMERGE_PAT not set — skipping. A branch update by GITHUB_TOKEN won't re-run CI, so a PAT is required (see the setup issue)."
+            exit 0
+          fi
+
+          # Give GitHub a moment to recompute each PR's mergeStateStatus against
+          # the new trunk before we read it.
+          sleep 20
+
+          # `BEHIND` is exactly "behind base, no conflict, checks not failing":
+          # DIRTY (conflict) and BLOCKED (failing/pending checks) take precedence,
+          # so those are left for a human — which is the whole point.
+          gh pr list --repo "$REPO" --base trunk --state open --limit 100 \
+            --json number,isDraft,mergeStateStatus \
+            --jq '.[] | select(.isDraft == false and .mergeStateStatus == "BEHIND") | .number' \
+          | while read -r pr; do
+              [ -z "$pr" ] && continue
+              echo "::group::Updating PR #$pr"
+              if gh api --method PUT "repos/$REPO/pulls/$pr/update-branch" --silent; then
+                echo "updated #$pr — its CI will re-run against the latest trunk"
+              else
+                echo "::warning::could not update #$pr (resolve any conflict manually)"
+              fi
+              echo "::endgroup::"
+            done
