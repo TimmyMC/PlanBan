@@ -279,3 +279,50 @@ pub struct StepRun {
     pub stderr: Option<String>,
     pub created_at: DateTime<Utc>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_kind_as_str_display_and_from_str_roundtrip() {
+        for k in [SessionKind::Managed, SessionKind::External] {
+            assert_eq!(k.as_str().parse::<SessionKind>().unwrap(), k);
+            assert_eq!(k.to_string(), k.as_str());
+        }
+        assert!("nope".parse::<SessionKind>().is_err());
+    }
+
+    #[test]
+    fn session_status_roundtrips_and_reports_terminal() {
+        use SessionStatus::{Exited, Failed, Idle, Running, Waiting};
+        for s in [Running, Waiting, Idle, Failed, Exited] {
+            assert_eq!(s.as_str().parse::<SessionStatus>().unwrap(), s);
+            assert_eq!(s.to_string(), s.as_str());
+        }
+        assert!(Failed.is_terminal());
+        assert!(Exited.is_terminal());
+        for s in [Running, Waiting, Idle] {
+            assert!(!s.is_terminal());
+        }
+        assert!("bogus".parse::<SessionStatus>().is_err());
+    }
+
+    #[test]
+    fn transition_status_roundtrips() {
+        use TransitionStatus::{Blocked, Completed, Running};
+        for s in [Running, Blocked, Completed] {
+            assert_eq!(s.as_str().parse::<TransitionStatus>().unwrap(), s);
+        }
+        assert!("x".parse::<TransitionStatus>().is_err());
+    }
+
+    #[test]
+    fn step_status_roundtrips() {
+        use StepStatus::{Failed, Ok, Overridden, Skipped};
+        for s in [Ok, Failed, Skipped, Overridden] {
+            assert_eq!(s.as_str().parse::<StepStatus>().unwrap(), s);
+        }
+        assert!("x".parse::<StepStatus>().is_err());
+    }
+}

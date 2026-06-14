@@ -71,10 +71,20 @@ jobs:
         with:
           node-version: "22"
 
-      # Gate: line coverage must stay at/above the bar. Local baseline at the
-      # time this gate landed was ~79%; 75% leaves a small buffer for churn.
-      - name: Coverage (fail under 75% lines)
-        run: cargo llvm-cov --workspace --fail-under-lines 75
+      # Gate: line coverage must stay at/above the bar (the real gate), and emit
+      # lcov for the Codecov badge. Baseline at last check was ~82%.
+      - name: Coverage (fail under 80% lines)
+        run: cargo llvm-cov --workspace --fail-under-lines 80 --lcov --output-path lcov.info
+
+      # Best-effort upload for the README badge; never fails the gate (so a
+      # missing CODECOV_TOKEN can't block merges).
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   frontend:
     name: Frontend
@@ -101,6 +111,9 @@ jobs:
 
       - name: Lint · format (Biome)
         run: pnpm run lint
+
+      - name: Unit tests (Vitest)
+        run: pnpm test
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium

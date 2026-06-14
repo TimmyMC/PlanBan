@@ -65,3 +65,76 @@ pub fn get_array<'a>(value: &'a Value, path: &str) -> Option<&'a Vec<Value>> {
     };
     target.as_array()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn sample() -> Value {
+        json!({
+            "key": "PROJ-1",
+            "fields": { "status": { "name": "In Progress" }, "votes": 3, "done": false, "parent": null },
+            "labels": ["bug", "ui"],
+            "components": [{ "name": "core" }, { "name": "cli" }],
+            "items": [{ "key": "A" }, { "key": "B" }]
+        })
+    }
+
+    #[test]
+    fn get_resolves_nested_keys_and_array_indices() {
+        let v = sample();
+        assert_eq!(get(&v, "key"), Some(&json!("PROJ-1")));
+        assert_eq!(get(&v, "fields.status.name"), Some(&json!("In Progress")));
+        assert_eq!(get(&v, "items.1.key"), Some(&json!("B")));
+        // Empty segments (leading dot / `$.`-style) are skipped.
+        assert_eq!(get(&v, ".key"), Some(&json!("PROJ-1")));
+    }
+
+    #[test]
+    fn get_returns_none_for_missing_or_wrong_shape() {
+        let v = sample();
+        assert_eq!(get(&v, "nope"), None);
+        assert_eq!(get(&v, "fields.missing.x"), None);
+        assert_eq!(get(&v, "items.9"), None); // index out of range
+        assert_eq!(get(&v, "items.notanindex"), None); // non-numeric index
+        assert_eq!(get(&v, "key.deeper"), None); // descend into a scalar
+    }
+
+    #[test]
+    fn get_str_coerces_scalars_and_rejects_null_and_containers() {
+        let v = sample();
+        assert_eq!(
+            get_str(&v, "fields.status.name").as_deref(),
+            Some("In Progress")
+        );
+        assert_eq!(get_str(&v, "fields.votes").as_deref(), Some("3"));
+        assert_eq!(get_str(&v, "fields.done").as_deref(), Some("false"));
+        assert_eq!(get_str(&v, "fields.parent"), None); // null -> None
+        assert_eq!(get_str(&v, "fields"), None); // object isn't a scalar
+        assert_eq!(get_str(&v, "missing"), None);
+    }
+
+    #[test]
+    fn get_str_array_handles_strings_objects_and_non_arrays() {
+        let v = sample();
+        assert_eq!(get_str_array(&v, "labels"), vec!["bug", "ui"]);
+        // Objects coerce via their `name` field (labels/components shape).
+        assert_eq!(get_str_array(&v, "components"), vec!["core", "cli"]);
+        assert!(get_str_array(&v, "missing").is_empty());
+        assert!(get_str_array(&v, "key").is_empty()); // not an array
+    }
+
+    #[test]
+    fn get_array_supports_bare_top_level_and_dollar_prefix() {
+        let bare = json!([{ "key": "X" }]);
+        assert_eq!(get_array(&bare, "").map(Vec::len), Some(1));
+        assert_eq!(get_array(&bare, "$").map(Vec::len), Some(1));
+
+        let v = sample();
+        assert_eq!(get_array(&v, "$.items").map(Vec::len), Some(2));
+        assert_eq!(get_array(&v, "items").map(Vec::len), Some(2));
+        assert_eq!(get_array(&v, "key"), None); // scalar isn't an array
+        assert_eq!(get_array(&v, "missing"), None);
+    }
+}
