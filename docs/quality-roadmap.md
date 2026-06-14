@@ -54,10 +54,10 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
   `src-tauri/**` change, so pure-Rust PRs aren't taxed by the frontend/Tauri build.
 - ⬜ **Faster tests + caching** — `cargo-nextest` (speed + native flaky-retry + JUnit),
   `sccache`; Playwright `retries` + trace-on-failure artifact upload.
-- ⬜ **CI concurrency** — `concurrency: { group: <ref>, cancel-in-progress: true }` so
-  superseded pushes stop running and can't race auto-merge.
-- ⬜ **Auto-merge escape hatch** — a `do-not-merge`/`needs-human` label the auto-merge
-  workflow respects (Constitution §1, human-in-the-loop as the project grows).
+- ✅ **CI concurrency** — `concurrency: { group: <ref>, cancel-in-progress: true }` so
+  superseded runs stop and can't race auto-merge.
+- ✅ **Auto-merge escape hatch** — a `do-not-merge` label the auto-merge workflow
+  respects (Constitution §1): CI still runs, but the PR won't merge until it's removed.
 
 ## Agent self-improvement
 
