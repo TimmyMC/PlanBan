@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
 /* Light is the project default. The dark palette lives under `.dark` for a
    future theme toggle (nothing sets `.dark` today). */
