@@ -53,7 +53,8 @@ will recur, capture it via the `self-improve` skill (add/update a `SKILL.md`).
 Lints: crate roots set `#![warn(clippy::all)]` with the doc/style nags allowed; CI runs
 `clippy -D warnings`. Don't enable `clippy::pedantic` broadly — it's high-noise; the
 allows in `lib.rs`/`main.rs` keep it opt-in if individual pedantic lints are wanted later.
-Deferred work (incl. moving sqlx to compile-time `query!`) lives in `BACKLOG.md`.
+Deferred work (incl. moving sqlx to compile-time `query!`) is tracked as GitHub issues
+(labels `roadmap` / `tech-debt`), not in-repo.
 
 The Rust toolchain is MSVC (`stable-x86_64-pc-windows-msvc`); the build compiles a
 vendored SQLite via `sqlx`, so a C toolchain (VS Build Tools) is required. Node.js is
@@ -111,5 +112,5 @@ overview, cron) plus the deterministic workflow engine. M2 lives in `engine.rs` 
 `Engine` struct: `transition` runs a transition's steps under gate-with-override;
 `override_for_issue` resumes a blocked one) and `audit.rs` (override reasons →
 `audit_log`); transitions/steps/hooks are config in `clabby.toml`. CLI: `clabby move`
-and `clabby override`. Next: M3 Tauri + React board with Playwright tests. See
-`README.md` and `BACKLOG.md`.
+and `clabby override`. M3 (Tauri + React board, Playwright e2e) is in too. Planned and
+deferred work lives in GitHub issues (labels `roadmap` / `tech-debt`), not in-repo.

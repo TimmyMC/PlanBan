@@ -34,7 +34,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
   `query!`/`query_as!` with a committed `.sqlx` offline cache (schema checked at build),
   move the inline `CREATE TABLE` block into `migrations/`, and add a CI step that fails if
   the offline cache is stale. Turns schema drift from a runtime error into a build error.
-  (Carried over from `BACKLOG.md`.)
+  (Tracked as issue #20.)
 
 ## Tier 2 — test depth (coverage ≠ confidence)
 
