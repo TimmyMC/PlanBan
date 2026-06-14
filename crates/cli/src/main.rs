@@ -19,130 +19,15 @@ mod render;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use tokio::sync::broadcast::error::RecvError;
 
+use clabby::{Cli, Command, CronCmd, IssueCmd, LogsCmd, SessionCmd, WorktreeCmd};
 use clabby_core::config::Config;
 use clabby_core::db::Db;
 use clabby_core::engine::{self, TransitionOutcome};
 use clabby_core::events::{Event, EventBus};
 use clabby_core::{git, overview, session, sync};
-
-#[derive(Parser)]
-#[command(
-    name = "clabby",
-    version,
-    about = "Local command center for agent work, synced to your issue tracker"
-)]
-struct Cli {
-    /// Path to clabby.toml (default: discovered from the current directory upward).
-    #[arg(long, global = true)]
-    config: Option<PathBuf>,
-
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand)]
-enum Command {
-    /// Pull issues from the tracker and reconcile them locally.
-    Sync,
-    /// Show the overview dashboard.
-    Status {
-        /// Re-render on a 2s interval until interrupted.
-        #[arg(long)]
-        watch: bool,
-    },
-    /// Issue operations.
-    #[command(subcommand)]
-    Issue(IssueCmd),
-    /// Session operations.
-    #[command(subcommand)]
-    Session(SessionCmd),
-    /// Worktree operations.
-    #[command(subcommand)]
-    Worktree(WorktreeCmd),
-    /// Session log inspection.
-    #[command(subcommand)]
-    Logs(LogsCmd),
-    /// Cron scheduler for configured [[cron]] jobs.
-    #[command(subcommand)]
-    Cron(CronCmd),
-    /// Move an issue to a new status, running the transition's steps (gated).
-    Move { key: String, to: String },
-    /// Override the blocked step of an issue's transition (records a reason).
-    Override {
-        key: String,
-        #[arg(long)]
-        reason: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum IssueCmd {
-    /// Push a status change to the tracker (records it as ours, §4).
-    SetStatus { key: String, status: String },
-}
-
-#[derive(Subcommand)]
-enum SessionCmd {
-    /// Spawn a managed agent run for an issue and stream its output.
-    Spawn {
-        key: String,
-        #[arg(long)]
-        agent: String,
-    },
-    /// Register an externally-run interactive session for the overview.
-    Attach {
-        key: String,
-        #[arg(long)]
-        worktree: String,
-        #[arg(long)]
-        branch: Option<String>,
-        #[arg(long)]
-        log: Option<String>,
-    },
-    /// List all known sessions.
-    List,
-}
-
-#[derive(Subcommand)]
-enum WorktreeCmd {
-    /// Create a git worktree for an issue and bind it.
-    Add {
-        key: String,
-        #[arg(long)]
-        branch: Option<String>,
-        /// Base commit/ref to branch from.
-        #[arg(long)]
-        base: Option<String>,
-        /// Explicit worktree path (default: <worktrees_dir>/<key>).
-        #[arg(long)]
-        path: Option<PathBuf>,
-    },
-    /// List recorded worktrees.
-    List,
-}
-
-#[derive(Subcommand)]
-enum LogsCmd {
-    /// Print the most recent log lines for a session.
-    Tail {
-        session_id: i64,
-        #[arg(long, default_value_t = 50)]
-        lines: i64,
-    },
-}
-
-#[derive(Subcommand)]
-enum CronCmd {
-    /// Run configured jobs. By default starts a scheduler until interrupted;
-    /// `--once` runs every configured action a single time and exits.
-    Run {
-        #[arg(long)]
-        once: bool,
-    },
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
