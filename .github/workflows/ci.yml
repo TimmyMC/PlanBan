@@ -12,6 +12,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
+# Restrict GITHUB_TOKEN to read-only by default; override per-job when more is needed.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -27,6 +31,9 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       frontend: ${{ steps.filter.outputs.frontend }}
