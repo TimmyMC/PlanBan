@@ -296,11 +296,11 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
   # Aggregator: always runs so branch protection has a single stable required
-  # check ("CI") even when upstream jobs are skipped for docs-only PRs.
+  # check ("All checks") even when upstream jobs are skipped for docs-only PRs.
   # Passes when every upstream job either succeeded or was skipped.
   # Branch protection must require this job's name — see setup-branch-protection.sh.
-  ci:
-    name: CI
+  all-checks:
+    name: All checks
     needs: [changes, gate-integrity, check, coverage, frontend, desktop]
     runs-on: ubuntu-latest
     if: always()
