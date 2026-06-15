@@ -87,13 +87,26 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Guard against weakened tests/gates
+        id: guard
         shell: bash
         env:
           BASE_REF: ${{ github.base_ref }}
           GATE_CHANGE_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'gate-change-approved') }}
         run: |
           git fetch --no-tags origin "$BASE_REF"
-          scripts/gate-guard.sh "origin/$BASE_REF"
+          set +e
+          output=$(scripts/gate-guard.sh "origin/$BASE_REF")
+          exit_code=$?
+          set -e
+          echo "$output"
+          # Capture the bullet-point findings for the PR comment
+          findings=$(printf '%s\n' "$output" | grep '^  - ' || true)
+          {
+            echo "findings<<GATE_FINDINGS_END"
+            printf '%s\n' "$findings"
+            echo "GATE_FINDINGS_END"
+          } >> "$GITHUB_OUTPUT"
+          exit "$exit_code"
 
       - name: Comment — action required to unblock
         if: failure()
@@ -101,6 +114,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          FINDINGS: ${{ steps.guard.outputs.findings }}
         shell: bash
         run: |
           MARKER="<!-- gate-change-required -->"
@@ -108,14 +122,14 @@ jobs:
           existing=$(gh api "repos/$REPO/issues/$PR/comments" \
             --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
           [ -n "$existing" ] && exit 0
-          gh api "repos/$REPO/issues/$PR/comments" -X POST -f body="$MARKER
-          ## Gate integrity blocked this PR
-
-          This PR modifies CI/test machinery (\`.github/workflows/ci.yml\`, \`scripts/gate-guard.sh\`, test files, or coverage thresholds). The guard tripped to prevent silent weakening.
-
-          **To unblock:** apply the \`gate-change-approved\` label — CI will re-run and this check will clear automatically.
-
-          If the change was unintentional (a test removed, threshold lowered), restore the original gate instead."
+          body=$(printf '%s\n' "$MARKER" \
+            "## ⚠️ Gate integrity blocked this PR" "" \
+            "The guard detected a change to CI/test machinery that could weaken the gate:" "" \
+            "\`\`\`" "$FINDINGS" "\`\`\`" "" \
+            "**To unblock:** apply the \`gate-change-approved\` label — CI will re-run and this check will clear." "" \
+            "If the change was unintentional (test removed, threshold lowered), restore the original gate instead.")
+          jq -n --arg body "$body" '{body: $body}' \
+            | gh api "repos/$REPO/issues/$PR/comments" -X POST --input -
 
   check:
     name: Lint & test
