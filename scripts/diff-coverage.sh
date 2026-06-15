@@ -15,7 +15,8 @@
 #     <fail-under>  minimum % of changed lines that must be covered
 #     [path-prefix] prepended to report paths so they match git's repo-relative
 #                   paths. Vitest emits ui-relative `src/...` → pass `ui/`.
-#                   cargo-llvm-cov is already repo-relative → omit.
+#                   cargo-llvm-cov emits absolute paths (stripped to repo-relative
+#                   automatically via the git root) → omit.
 #
 #   Run locally before pushing, e.g.:
 #     scripts/diff-coverage.sh ui/coverage/lcov.info origin/trunk 90 ui/
@@ -32,11 +33,18 @@ if [ ! -f "$LCOV" ]; then
   exit 1
 fi
 
-# Normalize report paths to repo-relative POSIX so diff-cover can match them to
-# `git diff` output: Windows V8 lcov uses backslashes and ui-relative paths.
+# Normalize report SF paths to repo-relative POSIX so diff-cover can match them
+# to `git diff` output:
+#   - backslashes -> forward slashes (Windows lcov)
+#   - strip an absolute repo-root prefix (cargo-llvm-cov emits absolute paths)
+#   - prepend the caller's path prefix (Vitest lcov is ui-relative)
 normalized="$(mktemp)"
 trap 'rm -f "$normalized"' EXIT
-sed -e 's/\\/\//g' -e "s#^SF:#SF:${PREFIX}#" "$LCOV" > "$normalized"
+root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+sed -e 's/\\/\//g' "$LCOV" \
+  | { if [ -n "$root" ]; then sed "s#^SF:${root}/#SF:#"; else cat; fi; } \
+  | sed "s#^SF:#SF:${PREFIX}#" \
+  > "$normalized"
 
 echo "diff-coverage: $LCOV vs $BASE (fail-under ${FAIL_UNDER}%, prefix '${PREFIX:-<none>}')"
 diff-cover "$normalized" --compare-branch "$BASE" --fail-under "$FAIL_UNDER"

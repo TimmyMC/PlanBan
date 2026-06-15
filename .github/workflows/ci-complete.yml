@@ -153,6 +153,9 @@ jobs:
     if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Diff coverage needs full history + the base branch to diff against.
+          fetch-depth: 0
 
       - name: Install Rust (+ llvm-tools)
         uses: dtolnay/rust-toolchain@1.96.0
@@ -171,9 +174,26 @@ jobs:
           node-version: "22"
 
       # Gate: line coverage must stay at/above the bar (the real gate), and emit
-      # lcov for the Codecov badge. Baseline at last check was ~82%.
-      - name: Coverage (fail under 80% lines)
-        run: cargo llvm-cov --workspace --fail-under-lines 80 --lcov --output-path lcov.info
+      # lcov for the Codecov badge + the diff-coverage gate below. Ratcheted to
+      # 85 (line coverage was ~87% at last check); raise it as coverage climbs.
+      - name: Coverage (fail under 85% lines)
+        run: cargo llvm-cov --workspace --fail-under-lines 85 --lcov --output-path lcov.info
+
+      # Per-PR gate on *changed* lines (Tier 2), so new under-tested code can't
+      # ride in under the global floor. Needs Python + the base branch.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Diff coverage (changed lines)
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python -m pip install --quiet diff-cover
+          git fetch --no-tags origin "$BASE_REF"
+          scripts/diff-coverage.sh lcov.info "origin/$BASE_REF" 90
 
       # Best-effort upload for the README badge; never fails the gate (so a
       # missing CODECOV_TOKEN can't block merges).
@@ -195,6 +215,9 @@ jobs:
         working-directory: ui
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Diff coverage needs full history + the base branch to diff against.
+          fetch-depth: 0
 
       - name: Set up Node 22
         uses: actions/setup-node@v6
@@ -216,11 +239,38 @@ jobs:
       - name: Unit tests + coverage (Vitest)
         run: pnpm test:cov
 
+      # Per-PR gate on *changed* unit-coverage lines (Tier 2). Runs from the repo
+      # root so git diff + the shared script resolve repo-relative paths.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Diff coverage (changed lines)
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python -m pip install --quiet diff-cover
+          git fetch --no-tags origin "$BASE_REF"
+          scripts/diff-coverage.sh ui/coverage/lcov.info "origin/$BASE_REF" 90 ui/
+
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium
 
       - name: E2E tests
         run: pnpm run test:e2e
+
+      # Separate, report-only e2e coverage track (not gated yet): uploaded so it
+      # can be inspected and later graduate to its own diff gate.
+      - name: Upload e2e coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-coverage
+          path: ui/coverage-e2e
+          retention-days: 7
 
       # Reliability: on a failed (retried) run, keep the Playwright trace/report
       # so the failure is debuggable instead of a silent flake.

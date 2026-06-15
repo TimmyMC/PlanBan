@@ -39,12 +39,17 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 
 ## Tier 2 — test depth (coverage ≠ confidence)
 
-- ⬜ **Diff coverage** — gate on changed-line coverage per PR (not just the global floor),
-  and ratchet the global floor upward over time.
-- 🚧 **Frontend unit/component tests** — Vitest is wired (jsdom + Testing Library),
-  covering the `mockApi` seam and `IssueCard`, and runs in the `Frontend` CI job (`pnpm
-  test`). *Still to do:* a frontend coverage gate and `axe-core` a11y assertions in the
-  Playwright suite.
+- ✅ **Diff coverage** — `scripts/diff-coverage.sh` (diff-cover) gates *changed-line*
+  coverage per PR in both the `Coverage` (Rust) and `Frontend` (Vitest) jobs, so new
+  under-tested code can't ride in under the global floor. The global floors are ratcheted
+  alongside it (Rust line floor 80 → 85). *Deferred:* promoting the separate e2e coverage
+  track (below) from report-only to its own diff gate.
+- ✅ **Frontend unit/component tests** — Vitest (jsdom + Testing Library) covers the
+  `mockApi` seam, the components, and the `useBoard` handler logic; the coverage gate
+  (`vite.config.ts` thresholds + the per-PR diff gate) and `axe-core` a11y assertions
+  (asserted across resting / gated-banner / post-override states) both ship. Coverage is
+  tracked **per test type**: Vitest measures units only, while Playwright e2e has a
+  separate, report-only track (`ui/coverage-e2e`) that is never merged into the unit number.
 - ⬜ **Mutation testing** — a scheduled (weekly) `cargo-mutants` run on `core` (too slow
   per-PR), surfaced as a report/issue. Validates that tests *catch* bugs, not just execute.
 - ⬜ **Secret scanning** — `gitleaks` in CI and pre-commit.

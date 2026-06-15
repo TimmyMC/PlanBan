@@ -51,8 +51,10 @@ check, no ruleset dependency. Each turns a value into deterministic teeth.
 - **Doc drift** — `trycmd` runs the `crates/cli/tests/cmd/*.md` transcripts as snapshot tests,
   so the living docs fail the build when command output drifts. Regenerate intentionally with
   `TRYCMD=overwrite cargo test -p clabby --test cli_docs`.
-- **Depth backstops** — line-coverage gates (Rust and frontend) keep the above from being
-  satisfied by shallow tests.
+- **Depth backstops** — line-coverage gates (Rust and frontend) plus a per-PR *diff*-coverage
+  gate (`scripts/diff-coverage.sh`, on the lines a PR changes) keep the above from being
+  satisfied by shallow tests. Frontend coverage is tracked per test type: Vitest measures
+  units, while Playwright e2e has a separate, report-only coverage track (`ui/coverage-e2e`).
 
 ### The meta-gate: don't loosen a gate to go green
 
