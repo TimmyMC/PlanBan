@@ -2,6 +2,10 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  // Reset/aggregate the separate e2e coverage track around the whole run; the
+  // per-test V8 capture lives in the auto fixture (tests/fixtures.ts).
+  globalSetup: "./tests/global-setup.ts",
+  globalTeardown: "./tests/global-teardown.ts",
   fullyParallel: true,
   // One retry so a transient flake doesn't redden CI; the retry captures a trace
   // (uploaded as an artifact in CI) so failures are debuggable, never silent.
