@@ -76,6 +76,9 @@ jobs:
     name: Gate integrity
     needs: changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write  # post the "apply gate-change-approved" comment on failure
     if: needs.changes.outputs.any_code == 'true' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
     steps:
       - uses: actions/checkout@v6
@@ -91,6 +94,28 @@ jobs:
         run: |
           git fetch --no-tags origin "$BASE_REF"
           scripts/gate-guard.sh "origin/$BASE_REF"
+
+      - name: Comment — action required to unblock
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          MARKER="<!-- gate-change-required -->"
+          # Don't spam: skip if we already posted this comment on the PR
+          existing=$(gh api "repos/$REPO/issues/$PR/comments" \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
+          [ -n "$existing" ] && exit 0
+          gh api "repos/$REPO/issues/$PR/comments" -X POST -f body="$MARKER
+          ## Gate integrity blocked this PR
+
+          This PR modifies CI/test machinery (\`.github/workflows/ci.yml\`, \`scripts/gate-guard.sh\`, test files, or coverage thresholds). The guard tripped to prevent silent weakening.
+
+          **To unblock:** apply the \`gate-change-approved\` label — CI will re-run and this check will clear automatically.
+
+          If the change was unintentional (a test removed, threshold lowered), restore the original gate instead."
 
   check:
     name: Lint & test
