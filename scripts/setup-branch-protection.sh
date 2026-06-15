@@ -28,15 +28,15 @@ echo "  - auto-merge + squash-only + auto-delete branches: on"
 #    on. `strict` requires the branch be up to date with trunk before merging.
 #    No required reviews: this is a solo repo, and a required review with no
 #    second approver would deadlock auto-merge — checks alone are the gate.
+#
+#    Only the sentinel "CI" job is required — it aggregates all upstream jobs
+#    and passes when each either succeeded or was skipped (path filtering).
 gh api -X PUT "repos/$REPO/branches/trunk/protection" --input - >/dev/null <<'JSON'
 {
   "required_status_checks": {
     "strict": true,
     "contexts": [
-      "Lint & test",
-      "Coverage",
-      "Frontend",
-      "Desktop app"
+      "CI"
     ]
   },
   "enforce_admins": false,
@@ -47,5 +47,5 @@ gh api -X PUT "repos/$REPO/branches/trunk/protection" --input - >/dev/null <<'JS
   "allow_deletions": false
 }
 JSON
-echo "  - trunk protected: PR + 3 required checks, strict, linear history"
+echo "  - trunk protected: PR + CI sentinel required check, strict, linear history"
 echo "Done. New work: branch -> PR -> auto-merges when green."
