@@ -50,7 +50,7 @@ directly. Branch off, open a PR, and it auto-merges once CI is green. CI gates:
 [`docs/quality-roadmap.md`](docs/quality-roadmap.md).
 
 **Quality gates worth knowing.** The toolchain is pinned in `rust-toolchain.toml` (bump it
-*and* the `dtolnay/rust-toolchain@<ver>` refs in `ci.yml` together). `crates/core/tests/architecture.rs`
+*and* the `dtolnay/rust-toolchain@<ver>` refs in `ci-complete.yml` together). `crates/core/tests/architecture.rs`
 is a fitness function that fails if `clabby-core` gains a UI/vendor/network dependency or
 import (Constitution §7/§11) — if you're tempted to add one to core, it belongs in a
 command template or driver instead.

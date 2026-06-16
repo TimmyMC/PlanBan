@@ -1,6 +1,6 @@
 # Clabby
 
-[![CI](https://github.com/TimmyMC/PlanBan/actions/workflows/ci.yml/badge.svg)](https://github.com/TimmyMC/PlanBan/actions/workflows/ci.yml)
+[![CI](https://github.com/TimmyMC/PlanBan/actions/workflows/ci-complete.yml/badge.svg)](https://github.com/TimmyMC/PlanBan/actions/workflows/ci-complete.yml)
 [![codecov](https://codecov.io/gh/TimmyMC/PlanBan/graph/badge.svg)](https://codecov.io/gh/TimmyMC/PlanBan)
 
 A **local command center** for agent-assisted software work: a dashboard that keeps
@@ -121,15 +121,14 @@ script; worktree tests use git).
 
 ## CI and local checks
 
-CI (`.github/workflows/ci.yml`) runs four gates on every PR and push:
+CI (`.github/workflows/ci-complete.yml`) path-filters each PR and runs only what's relevant:
 
-- **`fmt · clippy · test`** — `cargo fmt --check`, `cargo clippy --workspace
-  --all-targets -- -D warnings`, and `cargo test --workspace`.
-- **`coverage`** — `cargo llvm-cov --workspace --fail-under-lines 75`.
-- **`build · e2e`** — the frontend `tsc`/`vite` build, Biome lint, and the Playwright
-  board suite.
-- **`tauri shell`** — compiles the Tauri desktop shell (kept outside the Cargo
-  workspace) and clippies it.
+- **`Lint & test`** — `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`.
+- **`Coverage`** — `cargo llvm-cov --workspace --fail-under-lines 80`.
+- **`Frontend`** — the frontend `tsc`/`vite` build, Biome lint, and the Playwright board suite.
+- **`Desktop app`** — compiles the Tauri desktop shell (outside the Cargo workspace) and clippies it.
+- **`Gate integrity`** — blocks gate weakening (deleted tests, lowered thresholds, ignored checks).
+- **`CI complete`** — aggregator; the single required status check; passes when all upstream jobs succeeded or were skipped.
 
 Lints follow the default + `clippy::all` set with documentation/style nags allowed
 (see the crate roots). Run the Rust gate locally before pushing:

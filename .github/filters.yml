@@ -1,4 +1,4 @@
-# Path filters for the All-checks workflow (consumed by dorny/paths-filter in the
+# Path filters for the CI complete workflow (consumed by dorny/paths-filter in the
 # `changes` job). Defined here, once, with YAML anchors so `any_code` is derived from
 # the others and can never drift out of sync.
 #

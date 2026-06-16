@@ -27,7 +27,7 @@ trunk to merge), so when trunk advances `.github/workflows/auto-update-prs.yml` 
 every open, conflict-free PR and re-runs its CI — PRs merge in a self-healing cascade.
 The only things that need a human are a **conflict** or a **CI failure**. This needs a
 `AUTOMERGE_PAT` secret (a branch update by the default token wouldn't re-trigger CI);
-without it the workflow no-ops. Stale *running* CI is cancelled by `ci.yml`'s
+without it the workflow no-ops. Stale *running* CI is cancelled by `ci-complete.yml`'s
 `concurrency` block.
 
 > **Why gate on the CI workflow, not GitHub "auto-merge"?** GitHub's native
@@ -55,7 +55,7 @@ job is what gates that crate so it can't silently stop compiling.
 The coverage bar is **80% line coverage**, measured across the workspace by
 `cargo-llvm-cov`. Measured coverage is ~82%; the 80% floor leaves a small buffer
 for churn. Raise it as coverage improves — bump `--fail-under-lines` in
-`.github/workflows/ci.yml` and update the table above.
+`.github/workflows/ci-complete.yml` and update the table above.
 
 ## One-time setup (recommended, but not required for the wait)
 
