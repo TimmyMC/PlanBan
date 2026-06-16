@@ -60,7 +60,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write  # post the "apply gate-change-approved" comment on failure
+      # PR comments go through the issues-comments endpoint, but for a PR that
+      # endpoint is governed by pull-requests (not issues) write — without it the
+      # "apply gate-change-approved" comment POST 403s.
+      pull-requests: write
     if: needs.changes.outputs.any_code == 'true' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
     steps:
       - uses: actions/checkout@v6

@@ -10,11 +10,25 @@
 #   rust-toolchain.toml                   |    run    |   run    |    -     |   run   |     run
 #   ui/**                                 |    -      |    -     |   run    |   run   |     run
 #   src-tauri/**                          |    -      |    -     |    -     |   run   |     run
-#   scripts/**, .github/**, use-cases.md  |    -      |    -     |    -     |    -    |     run
+#   .github/workflows/**, filters.yml,    |    run    |   run    |   run    |   run   |     run
+#     coverage-thresholds.json (= &ci)    |           |          |          |         |
+#   scripts/**, other .github/**, uc.md   |    -      |    -     |    -     |    -    |     run
 #   docs/** (incl. examples), other *.md  |    -      |    -     |    -     |    -    |      -
 #
 # The `ci-complete` aggregator always runs and is the single required status check, so a
 # PR that skips every job above still reports green.
+
+# CI definition files that change how the build jobs themselves run: the workflow, the
+# path filters that decide what runs, and the coverage thresholds the jobs enforce.
+# Folded into rust/frontend/desktop below so editing any of them re-runs the affected
+# jobs — otherwise a workflow-logic or threshold edit would ship untested (the very job
+# it changes would be path-filtered out). Other .github/** files (dependabot, CODEOWNERS,
+# issue templates) don't change job behavior, so they only hit gate-integrity via
+# any_code's `.github/**` below.
+ci: &ci
+  - '.github/workflows/**'
+  - '.github/filters.yml'
+  - '.github/coverage-thresholds.json'
 
 # The workspace: the crates plus the root files Cargo/rustup force to live at the repo
 # root (manifest, lockfile, toolchain). diesel.toml lives under crates/core, so crates/**
@@ -24,9 +38,11 @@ rust: &rust
   - 'Cargo.toml'
   - 'Cargo.lock'
   - &toolchain 'rust-toolchain.toml'
+  - *ci
 
 frontend: &frontend
   - 'ui/**'
+  - *ci
 
 # The Tauri shell is a separate crate outside the workspace. It embeds ui/dist at compile
 # time (so it depends on the frontend) and compiles with the same pinned toolchain.
