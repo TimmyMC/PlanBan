@@ -80,16 +80,19 @@ jobs:
         run: |
           git fetch --no-tags origin "$BASE_REF"
           set +e
-          output=$(scripts/gate-guard.sh "origin/$BASE_REF")
+          output=$(GATE_GUARD_FILES_OUT=guard-files.txt scripts/gate-guard.sh "origin/$BASE_REF")
           exit_code=$?
           set -e
           echo "$output"
-          # Capture the bullet-point findings for the PR comment
+          # Capture the bullet-point findings + the flagged files (for diff deeplinks).
           findings=$(printf '%s\n' "$output" | grep '^  - ' || true)
           {
             echo "findings<<GATE_FINDINGS_END"
             printf '%s\n' "$findings"
             echo "GATE_FINDINGS_END"
+            echo "files<<GATE_FILES_END"
+            cat guard-files.txt 2>/dev/null || true
+            echo "GATE_FILES_END"
           } >> "$GITHUB_OUTPUT"
           exit "$exit_code"
 
@@ -99,7 +102,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
           FINDINGS: ${{ steps.guard.outputs.findings }}
+          FILES: ${{ steps.guard.outputs.files }}
         shell: bash
         run: |
           MARKER="<!-- gate-change-required -->"
@@ -107,12 +112,25 @@ jobs:
           existing=$(gh api "repos/$REPO/issues/$PR/comments" \
             --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
           [ -n "$existing" ] && exit 0
-          body=$(printf '%s\n' "$MARKER" \
-            "## ⚠️ Gate integrity blocked this PR" "" \
-            "The guard detected a change to CI/test machinery that could weaken the gate:" "" \
-            "\`\`\`" "$FINDINGS" "\`\`\`" "" \
-            "**To unblock:** apply the \`gate-change-approved\` label — CI will re-run and this check will clear." "" \
+          # Build clickable deeplinks to each flagged file's diff. GitHub anchors a
+          # file on the Files-changed tab as #diff-<sha256(path)>.
+          links=""
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            anchor=$(printf '%s' "$f" | sha256sum | cut -d' ' -f1)
+            links+="- [\`$f\`]($PR_URL/files#diff-$anchor)"$'\n'
+          done <<< "$FILES"
+          # Assemble the body line-by-line (indentation-independent — no heredoc).
+          lines=("$MARKER"
+            "## ⚠️ Gate integrity blocked this PR" ""
+            "The guard detected a change to CI/test machinery that could weaken the gate:" ""
+            '```' "$FINDINGS" '```' "")
+          if [ -n "$links" ]; then
+            lines+=("**Jump to the diff of the flagged files:**" "" "$links")
+          fi
+          lines+=("**To unblock:** apply the \`gate-change-approved\` label — CI will re-run and this check will clear." ""
             "If the change was unintentional (test removed, threshold lowered), restore the original gate instead.")
+          body=$(printf '%s\n' "${lines[@]}")
           jq -n --arg body "$body" '{body: $body}' \
             | gh api "repos/$REPO/issues/$PR/comments" -X POST --input -
 
