@@ -10,8 +10,8 @@ const uiDir = fileURLToPath(new URL("..", import.meta.url)).replace(/\\/g, "/");
 
 // Report-only e2e (Playwright) coverage — a SEPARATE track from Vitest's unit
 // coverage in ui/vite.config.ts, never merged into the unit gate. It emits lcov
-// so it can later graduate to its own diff-coverage gate; for now CI just
-// uploads it (docs/quality-roadmap.md, Tier 2).
+// so it can later graduate to its own gate; for now CI just uploads it as an
+// artifact (docs/quality-roadmap.md, Tier 2).
 export const coverageOptions: CoverageReportOptions = {
   name: "Clabby e2e coverage",
   outputDir: `${uiDir}coverage-e2e`,

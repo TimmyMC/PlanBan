@@ -1,0 +1,8 @@
+{
+  "_comment": "Single source for all coverage floors. Read by ui/vite.config.ts (frontend Vitest) and .github/workflows/ci-complete.yml (Rust). Raise deliberately as coverage climbs; gate-guard blocks accidental lowering.",
+  "rust_lines": 85,
+  "frontend_lines": 90,
+  "frontend_statements": 90,
+  "frontend_functions": 90,
+  "frontend_branches": 85
+}

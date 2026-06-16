@@ -153,9 +153,6 @@ jobs:
     if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v6
-        with:
-          # Diff coverage needs full history + the base branch to diff against.
-          fetch-depth: 0
 
       - name: Install Rust (+ llvm-tools)
         uses: dtolnay/rust-toolchain@1.96.0
@@ -173,27 +170,27 @@ jobs:
         with:
           node-version: "22"
 
-      # Gate: line coverage must stay at/above the bar (the real gate), and emit
-      # lcov for the Codecov badge + the diff-coverage gate below. Ratcheted to
-      # 85 (line coverage was ~87% at last check); raise it as coverage climbs.
-      - name: Coverage (fail under 85% lines)
-        run: cargo llvm-cov --workspace --fail-under-lines 85 --lcov --output-path lcov.info
-
-      # Per-PR gate on *changed* lines (Tier 2), so new under-tested code can't
-      # ride in under the global floor. Needs Python + the base branch.
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Diff coverage (changed lines)
+      # Gate: line coverage must stay at/above the floor (the real gate). The floor
+      # is centralized in .github/coverage-thresholds.json (shared with the frontend
+      # Vitest thresholds via ui/vite.config.ts) so there's one place to ratchet.
+      # Two-phase llvm-cov: collect once, then emit lcov AND a text summary without
+      # re-running tests (--lcov and --summary-only can't be combined in one call).
+      # lcov is kept for the best-effort Codecov upload below (issue #30).
+      - name: Coverage (fail under floor)
         shell: bash
-        env:
-          BASE_REF: ${{ github.base_ref }}
         run: |
-          python -m pip install --quiet diff-cover
-          git fetch --no-tags origin "$BASE_REF"
-          scripts/diff-coverage.sh lcov.info "origin/$BASE_REF" 90
+          FLOOR=$(jq .rust_lines .github/coverage-thresholds.json)
+          cargo llvm-cov --workspace --no-report
+          cargo llvm-cov report --lcov --output-path lcov.info
+          # Surface the level on the PR (Checks → Coverage → Summary). $GITHUB_STEP_SUMMARY
+          # is Markdown, so fence the table; this write must not mask the gate's exit code.
+          {
+            echo "### Rust coverage (floor ${FLOOR}% lines)"
+            echo '```'
+            cargo llvm-cov report --summary-only
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cargo llvm-cov report --summary-only --fail-under-lines "$FLOOR"
 
       # Best-effort upload for the README badge; never fails the gate (so a
       # missing CODECOV_TOKEN can't block merges).
@@ -215,9 +212,6 @@ jobs:
         working-directory: ui
     steps:
       - uses: actions/checkout@v6
-        with:
-          # Diff coverage needs full history + the base branch to diff against.
-          fetch-depth: 0
 
       - name: Set up Node 22
         uses: actions/setup-node@v6
@@ -236,25 +230,22 @@ jobs:
       - name: Lint · format (Biome)
         run: pnpm run lint
 
+      # Vitest enforces the unit-coverage thresholds (centralized in
+      # .github/coverage-thresholds.json via vite.config.ts). Tee the run to a log,
+      # then append a fenced coverage table to the PR step summary while preserving
+      # the gate's exit code (a threshold breach must still fail the step).
       - name: Unit tests + coverage (Vitest)
-        run: pnpm test:cov
-
-      # Per-PR gate on *changed* unit-coverage lines (Tier 2). Runs from the repo
-      # root so git diff + the shared script resolve repo-relative paths.
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Diff coverage (changed lines)
         shell: bash
-        working-directory: ${{ github.workspace }}
-        env:
-          BASE_REF: ${{ github.base_ref }}
         run: |
-          python -m pip install --quiet diff-cover
-          git fetch --no-tags origin "$BASE_REF"
-          scripts/diff-coverage.sh ui/coverage/lcov.info "origin/$BASE_REF" 90 ui/
+          status=0
+          pnpm test:cov 2>&1 | tee /tmp/vitest-cov.log || status=$?
+          {
+            echo '### Frontend unit coverage (Vitest)'
+            echo '```'
+            cat /tmp/vitest-cov.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium
@@ -262,8 +253,8 @@ jobs:
       - name: E2E tests
         run: pnpm run test:e2e
 
-      # Separate, report-only e2e coverage track (not gated yet): uploaded so it
-      # can be inspected and later graduate to its own diff gate.
+      # Separate, report-only e2e coverage track (not gated): uploaded as an
+      # artifact so it can be inspected and later graduate to its own gate.
       - name: Upload e2e coverage
         if: always()
         uses: actions/upload-artifact@v4

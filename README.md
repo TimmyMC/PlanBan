@@ -1,7 +1,6 @@
 # Clabby
 
 [![CI](https://github.com/TimmyMC/PlanBan/actions/workflows/ci-complete.yml/badge.svg)](https://github.com/TimmyMC/PlanBan/actions/workflows/ci-complete.yml)
-[![codecov](https://codecov.io/gh/TimmyMC/PlanBan/graph/badge.svg)](https://codecov.io/gh/TimmyMC/PlanBan)
 
 A **local command center** for agent-assisted software work: a dashboard that keeps
 an overview of many concurrent work streams (multiple agents, terminals, git
