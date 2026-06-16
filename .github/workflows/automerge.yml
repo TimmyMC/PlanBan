@@ -1,21 +1,21 @@
 name: Auto-merge
 
-# Trunk-based development: a PR into `trunk` merges itself once CI passes.
+# Trunk-based development: a PR into `trunk` merges itself once all checks pass.
 #
-# This triggers on the *CI workflow completing successfully* rather than
+# This triggers on the *CI complete workflow completing successfully* rather than
 # enabling GitHub's native auto-merge. That distinction matters: native
 # auto-merge only waits for checks when branch protection lists them as
 # required, so if protection isn't configured (or configured later) a PR can
-# merge *before checks finish*. Gating on `workflow_run` of CI means every job
-# in CI — Lint & test, Coverage, Frontend, Desktop app — must already be green
+# merge *before checks finish*. Gating on `workflow_run` means every job
+# in CI complete — Lint & test, Coverage, Frontend, Desktop app — must already be green
 # before this job can even start. No ordering footgun, no settings dependency.
 #
-# Branch protection (scripts/setup-branch-protection.sh) is still recommended
-# as a second layer that blocks direct pushes to trunk.
+# Branch protection is still recommended as a second layer that blocks direct
+# pushes to trunk (Settings → Branches → require "CI complete").
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["CI complete"]
     types: [completed]
 
 permissions:
@@ -26,25 +26,25 @@ jobs:
   merge:
     name: merge passing PR
     runs-on: ubuntu-latest
-    # Act only when CI fully succeeded AND that CI run was for a pull request
-    # (CI also runs on direct pushes to trunk — ignore those here).
+    # Act only when all checks fully succeeded AND that run was for a pull request
+    # (CI complete also runs on direct pushes to trunk — ignore those here).
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'pull_request'
     steps:
-      - name: Squash-merge the PR this CI run validated
+      - name: Squash-merge the PR this run validated
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           SHA: ${{ github.event.workflow_run.head_sha }}
           OWNER: ${{ github.repository_owner }}
         run: |
-          # The PR whose head is exactly the commit CI just validated. Restrict
+          # The PR whose head is exactly the commit checks just validated. Restrict
           # to non-draft PRs authored by the owner or Dependabot; anything else
           # waits for a human to merge. (Dependabot's login comes back as
           # `app/dependabot` here, so match on a substring, not equality.)
           # A `do-not-merge` label is the human-in-the-loop escape hatch (§1):
-          # CI still runs, but auto-merge skips the PR until the label is removed.
+          # CI complete still runs, but auto-merge skips the PR until the label is removed.
           # Empty result => nothing to do.
           pr=$(gh pr list --state open --limit 100 \
                  --json number,headRefOid,isDraft,author,labels \
@@ -53,5 +53,5 @@ jobs:
             echo "No matching open PR for $SHA; nothing to merge."
             exit 0
           fi
-          echo "CI green for PR #$pr (head $SHA) — squash-merging."
+          echo "CI complete green for PR #$pr (head $SHA) — squash-merging."
           gh pr merge "$pr" --squash --delete-branch

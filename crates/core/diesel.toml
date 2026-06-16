@@ -1,0 +1,9 @@
+# Diesel CLI config. `schema.rs` is the compile-time-checked source of truth for
+# the SQL layer (#20). Lives beside the migrations it configures; run diesel from
+# this directory (crates/core). Regenerate schema.rs after changing a migration:
+#   diesel print-schema  (needs DATABASE_URL pointing at a migrated DB)
+[print_schema]
+file = "src/schema.rs"
+
+[migrations_directory]
+dir = "migrations"

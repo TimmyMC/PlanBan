@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `clabby/` is **Clabby** — a local, harness-agnostic command center for agent-assisted
 software work, synced to an issue tracker, with a deterministic workflow engine. It is
 explicitly **not** an autonomous agent runner: it enforces the workflow; the human
-decides. Read [`CONSTITUTION.md`](CONSTITUTION.md) first — its articles
+decides. Read [`CONSTITUTION.md`](docs/CONSTITUTION.md) first — its articles
 govern every change. If a change violates an article, the change is wrong.
 
 ## Commands (run from the repo root)
@@ -23,21 +23,25 @@ cargo build --bin clabby          # build just the CLI
 # Regenerate the trycmd living-doc snapshots after an intentional CLI output change:
 $env:TRYCMD="overwrite"; cargo test -p clabby --test cli_docs   # PowerShell
 
-# DB schema lives in crates/core/migrations/. After adding/editing a migration, keep
-# crates/core/src/schema.rs in sync (queries are checked against it at build time):
+# DB schema lives in crates/core/migrations/ (alongside diesel.toml). After adding/editing
+# a migration, keep crates/core/src/schema.rs in sync (queries are checked against it at
+# build time). Run diesel from crates/core so it finds diesel.toml:
 #   cargo install diesel_cli --no-default-features --features sqlite   # one-time
-#   $env:DATABASE_URL="sqlite://dev.db"; diesel migration run; diesel print-schema > crates/core/src/schema.rs
+#   cd crates/core; $env:DATABASE_URL="sqlite://dev.db"; diesel migration run; diesel print-schema > src/schema.rs
 
 # Run the full CI gate locally before pushing (fmt + clippy -D warnings + test):
 ./scripts/ci.ps1                  # or ./scripts/ci.sh, or `just`
 
-# One-time per clone: enable the auto-format pre-commit hook (cargo fmt + Biome):
+# One-time per clone: enable the git hooks (cargo fmt + Biome on commit, CI on push):
 ./scripts/install-hooks.ps1       # or ./scripts/install-hooks.sh
 ```
 
-The pre-commit hook (`scripts/hooks/pre-commit`, enabled via `core.hooksPath`) runs
-`cargo fmt` on staged Rust files and Biome `check --write` on staged frontend files,
-re-staging anything it reformats — so the CI fmt/lint gates never fail on formatting alone.
+Both hooks live in `scripts/hooks/` and are enabled together by pointing `core.hooksPath`
+there (`install-hooks` does this). The pre-commit hook runs `cargo fmt` on staged Rust
+files and Biome `check --write` on staged frontend files, re-staging anything it reformats
+— so the CI fmt/lint gates never fail on formatting alone. The pre-push hook runs the full
+local CI gate (`cargo fmt --check` + `clippy -D warnings` + `cargo test`) so a red push
+never reaches the remote.
 
 **Trunk-based development.** `trunk` is the protected default branch — don't push to it
 directly. Branch off, open a PR, and it auto-merges once CI is green. CI gates:
@@ -46,7 +50,7 @@ directly. Branch off, open a PR, and it auto-merges once CI is green. CI gates:
 [`docs/quality-roadmap.md`](docs/quality-roadmap.md).
 
 **Quality gates worth knowing.** The toolchain is pinned in `rust-toolchain.toml` (bump it
-*and* the `dtolnay/rust-toolchain@<ver>` refs in `ci.yml` together). `crates/core/tests/architecture.rs`
+*and* the `dtolnay/rust-toolchain@<ver>` refs in `ci-complete.yml` together). `crates/core/tests/architecture.rs`
 is a fitness function that fails if `clabby-core` gains a UI/vendor/network dependency or
 import (Constitution §7/§11) — if you're tempted to add one to core, it belongs in a
 command template or driver instead.
@@ -73,10 +77,10 @@ Deferred work is tracked as GitHub issues (labels `roadmap` / `tech-debt`), not 
 The Rust toolchain is MSVC (`stable-x86_64-pc-windows-msvc`); the build compiles a
 vendored SQLite via `diesel`/`libsqlite3-sys` (`bundled`), so a C toolchain (VS Build
 Tools) is required. Node.js is
-needed only to run the offline example tracker (`examples/tracker.mjs`).
+needed only to run the offline example tracker (`docs/examples/tracker.mjs`).
 
 Run the CLI against an example without installing:
-`./target/debug/clabby --config examples/jira/clabby.toml status` (or `cd` into the
+`./target/debug/clabby --config docs/examples/jira/clabby.toml status` (or `cd` into the
 example dir; config is discovered from cwd upward).
 
 ## Architecture
@@ -110,7 +114,7 @@ diverge by entry point.
 
 - **Add a new tracker/agent/VCS by editing config, not code.** If you find yourself
   adding a vendor-specific type to `core`, it belongs in a command template instead (§5,
-  §11). `examples/github/` exists to prove the engine runs unchanged on a different
+  §11). `docs/examples/github/` exists to prove the engine runs unchanged on a different
   tracker shape — keep that true.
 - **Tests guard behavior (§9), black-box first.** New *user-facing* behavior gets a
   black-box test driving the compiled binary in `crates/cli/tests/` — `assert_cmd`/

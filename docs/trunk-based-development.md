@@ -27,7 +27,7 @@ trunk to merge), so when trunk advances `.github/workflows/auto-update-prs.yml` 
 every open, conflict-free PR and re-runs its CI — PRs merge in a self-healing cascade.
 The only things that need a human are a **conflict** or a **CI failure**. This needs a
 `AUTOMERGE_PAT` secret (a branch update by the default token wouldn't re-trigger CI);
-without it the workflow no-ops. Stale *running* CI is cancelled by `ci.yml`'s
+without it the workflow no-ops. Stale *running* CI is cancelled by `ci-complete.yml`'s
 `concurrency` block.
 
 > **Why gate on the CI workflow, not GitHub "auto-merge"?** GitHub's native
@@ -55,7 +55,7 @@ job is what gates that crate so it can't silently stop compiling.
 The coverage bar is **80% line coverage**, measured across the workspace by
 `cargo-llvm-cov`. Measured coverage is ~82%; the 80% floor leaves a small buffer
 for churn. Raise it as coverage improves — bump `--fail-under-lines` in
-`.github/workflows/ci.yml` and update the table above.
+`.github/workflows/ci-complete.yml` and update the table above.
 
 ## One-time setup (recommended, but not required for the wait)
 
@@ -64,14 +64,9 @@ gate correctly. Branch protection is still worth adding as a **second layer** th
 blocks direct pushes to `trunk` and requires the checks at the GitHub level. It's a
 *setting*, not a file, so it isn't applied by cloning:
 
-```sh
-gh auth login                      # if not already authenticated
-./scripts/setup-branch-protection.sh   # idempotent; defaults to TimmyMC/PlanBan
-```
-
-Prefer clicking? **Settings → Branches → Add rule** for `trunk` → require pull
-requests and require the four status checks (strict). `enforce_admins` is left off,
-so you can still push a direct hotfix to `trunk` in a pinch.
+**Settings → Branches → Add rule** for `trunk` → require pull requests and require
+the `CI complete` status check (strict). `enforce_admins` is left off, so you can
+still push a direct hotfix to `trunk` in a pinch.
 
 Do **not** also enable GitHub's native "Allow auto-merge" and click *Enable
 auto-merge* on a PR before protection lists the required checks — that path merges

@@ -12,7 +12,7 @@ name: Auto-update PRs
 # would never re-run. AUTOMERGE_PAT (a PAT with contents + pull-requests write)
 # makes the update look like a real push. If the secret is unset, this no-ops with
 # a warning. (Stale *running* CI is cancelled separately by the `concurrency` block
-# in ci.yml.)
+# in ci-complete.yml.)
 
 on:
   push:

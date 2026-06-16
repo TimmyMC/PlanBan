@@ -37,3 +37,6 @@ Thumbs.db
 # Node / UI (later milestone)
 node_modules/
 dist/
+# Generated coverage output (Vitest `test:cov`, Playwright e2e coverage)
+coverage/
+coverage-e2e/

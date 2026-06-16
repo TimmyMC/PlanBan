@@ -1,4 +1,4 @@
-name: CI
+name: CI complete
 
 # PRs only. Trunk changes exclusively via auto-merged PRs whose CI already
 # passed, and the ruleset requires branches be up to date before merging (so the
@@ -12,6 +12,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
+# Restrict GITHUB_TOKEN to read-only by default; override per-job when more is needed.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -22,13 +26,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Detect which areas of the codebase changed so downstream jobs can skip
+  # when irrelevant (e.g. docs-only PRs skip the Rust compile + Playwright).
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+      any_code: ${{ steps.filter.outputs.any_code }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # Filters live in .github/filters.yml (DRY'd with YAML anchors; see the
+          # change-to-impact matrix there).
+          filters: .github/filters.yml
+
   # Stops an agent from making CI green by deleting a test or loosening a gate
   # instead of fixing the code. Rides the CI-success rail: if this fails, the
   # whole run fails and auto-merge (gated on CI success) never fires. A deliberate
   # gate change is approved by the owner adding the `gate-change-approved` label.
+  # Also fires unconditionally on label events so the label re-run always reaches
+  # the guard even when no new code was pushed.
   gate-integrity:
     name: Gate integrity
+    needs: changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write  # post the "apply gate-change-approved" comment on failure
+    if: needs.changes.outputs.any_code == 'true' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -36,19 +69,57 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Guard against weakened tests/gates
+        id: guard
         shell: bash
         env:
           BASE_REF: ${{ github.base_ref }}
           GATE_CHANGE_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'gate-change-approved') }}
         run: |
           git fetch --no-tags origin "$BASE_REF"
-          scripts/gate-guard.sh "origin/$BASE_REF"
+          set +e
+          output=$(scripts/gate-guard.sh "origin/$BASE_REF")
+          exit_code=$?
+          set -e
+          echo "$output"
+          # Capture the bullet-point findings for the PR comment
+          findings=$(printf '%s\n' "$output" | grep '^  - ' || true)
+          {
+            echo "findings<<GATE_FINDINGS_END"
+            printf '%s\n' "$findings"
+            echo "GATE_FINDINGS_END"
+          } >> "$GITHUB_OUTPUT"
+          exit "$exit_code"
+
+      - name: Comment — action required to unblock
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          FINDINGS: ${{ steps.guard.outputs.findings }}
+        shell: bash
+        run: |
+          MARKER="<!-- gate-change-required -->"
+          # Don't spam: skip if we already posted this comment on the PR
+          existing=$(gh api "repos/$REPO/issues/$PR/comments" \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
+          [ -n "$existing" ] && exit 0
+          body=$(printf '%s\n' "$MARKER" \
+            "## ⚠️ Gate integrity blocked this PR" "" \
+            "The guard detected a change to CI/test machinery that could weaken the gate:" "" \
+            "\`\`\`" "$FINDINGS" "\`\`\`" "" \
+            "**To unblock:** apply the \`gate-change-approved\` label — CI will re-run and this check will clear." "" \
+            "If the change was unintentional (test removed, threshold lowered), restore the original gate instead.")
+          jq -n --arg body "$body" '{body: $body}' \
+            | gh api "repos/$REPO/issues/$PR/comments" -X POST --input -
 
   check:
     name: Lint & test
+    needs: changes
     # Windows matches the dev environment and the cfg(windows) cmd-quoting path.
     # (Adding an ubuntu leg to exercise the sh path is tracked in BACKLOG.md.)
     runs-on: windows-latest
+    if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -77,7 +148,9 @@ jobs:
 
   coverage:
     name: Coverage
+    needs: changes
     runs-on: windows-latest
+    if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -114,7 +187,9 @@ jobs:
 
   frontend:
     name: Frontend
+    needs: changes
     runs-on: windows-latest
+    if: needs.changes.outputs.frontend == 'true'
     defaults:
       run:
         working-directory: ui
@@ -161,10 +236,12 @@ jobs:
 
   desktop:
     name: Desktop app
+    needs: changes
     # src-tauri is intentionally OUTSIDE the cargo workspace (WebView2 system
     # deps), so the workspace lint/test/coverage jobs never touch it. This job
     # is what actually gates the desktop shell: it must compile + pass clippy.
     runs-on: windows-latest
+    if: needs.changes.outputs.desktop == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -199,3 +276,18 @@ jobs:
 
       - name: Clippy (warnings are errors)
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  # Aggregator: always runs so branch protection has a single stable required
+  # check ("CI complete") even when upstream jobs are skipped for docs-only PRs.
+  # Passes when every upstream job either succeeded or was skipped.
+  # Branch protection must require this job's name ("CI complete").
+  ci-complete:
+    name: CI complete
+    needs: [changes, gate-integrity, check, coverage, frontend, desktop]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: CI complete — all checks passed or were skipped
+        run: |
+          echo '${{ toJSON(needs) }}' \
+            | jq -e '[.[].result] | all(. == "success" or . == "skipped")'

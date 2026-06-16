@@ -1,6 +1,6 @@
 # Clabby
 
-[![CI](https://github.com/TimmyMC/PlanBan/actions/workflows/ci.yml/badge.svg)](https://github.com/TimmyMC/PlanBan/actions/workflows/ci.yml)
+[![CI](https://github.com/TimmyMC/PlanBan/actions/workflows/ci-complete.yml/badge.svg)](https://github.com/TimmyMC/PlanBan/actions/workflows/ci-complete.yml)
 [![codecov](https://codecov.io/gh/TimmyMC/PlanBan/graph/badge.svg)](https://codecov.io/gh/TimmyMC/PlanBan)
 
 A **local command center** for agent-assisted software work: a dashboard that keeps
@@ -10,7 +10,7 @@ workflow engine that guarantees the mandatory steps happen — while you stay in
 loop.
 
 Clabby is **not** an autonomous agent runner. It enforces your workflow; you do the
-thinking. See [`CONSTITUTION.md`](./CONSTITUTION.md) for the principles that govern
+thinking. See [`CONSTITUTION.md`](./docs/CONSTITUTION.md) for the principles that govern
 every change.
 
 ![The Clabby board — Tauri + React (M3)](docs/board.png)
@@ -49,25 +49,25 @@ Requires the Rust toolchain and Node.js (the demo's fake tracker is a node scrip
 
 ```sh
 cargo build
-cd examples/jira
+cd docs/examples/jira
 
 # Pull issues from the (fake) tracker and show the board
-../../target/debug/clabby sync
-../../target/debug/clabby status
+../../../target/debug/clabby sync
+../../../target/debug/clabby status
 
 # Transition an issue from Clabby (pushes back to the tracker)
-../../target/debug/clabby issue set-status PROJ-12 "In Review"
+../../../target/debug/clabby issue set-status PROJ-12 "In Review"
 
 # Run a managed agent for an issue, streaming its output
-../../target/debug/clabby session spawn PROJ-12 --agent echo
+../../../target/debug/clabby session spawn PROJ-12 --agent echo
 
 # Simulate someone else changing the tracker, then re-sync to see divergence
 node ../tracker.mjs issues.json transition PROJ-44 "Done"
-../../target/debug/clabby sync
-../../target/debug/clabby status        # PROJ-44 shows "! diverged(->Done)"
+../../../target/debug/clabby sync
+../../../target/debug/clabby status        # PROJ-44 shows "! diverged(->Done)"
 ```
 
-`examples/github/` is the **same engine** driven by a deliberately different tracker
+`docs/examples/github/` is the **same engine** driven by a deliberately different tracker
 shape (top-level array, flat `state`, label objects) — proof that adopting a new
 workflow needs config changes only, never code (Constitution §11).
 
@@ -121,15 +121,14 @@ script; worktree tests use git).
 
 ## CI and local checks
 
-CI (`.github/workflows/ci.yml`) runs four gates on every PR and push:
+CI (`.github/workflows/ci-complete.yml`) path-filters each PR and runs only what's relevant:
 
-- **`fmt · clippy · test`** — `cargo fmt --check`, `cargo clippy --workspace
-  --all-targets -- -D warnings`, and `cargo test --workspace`.
-- **`coverage`** — `cargo llvm-cov --workspace --fail-under-lines 75`.
-- **`build · e2e`** — the frontend `tsc`/`vite` build, Biome lint, and the Playwright
-  board suite.
-- **`tauri shell`** — compiles the Tauri desktop shell (kept outside the Cargo
-  workspace) and clippies it.
+- **`Lint & test`** — `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`.
+- **`Coverage`** — `cargo llvm-cov --workspace --fail-under-lines 80`.
+- **`Frontend`** — the frontend `tsc`/`vite` build, Biome lint, and the Playwright board suite.
+- **`Desktop app`** — compiles the Tauri desktop shell (outside the Cargo workspace) and clippies it.
+- **`Gate integrity`** — blocks gate weakening (deleted tests, lowered thresholds, ignored checks).
+- **`CI complete`** — aggregator; the single required status check; passes when all upstream jobs succeeded or were skipped.
 
 Lints follow the default + `clippy::all` set with documentation/style nags allowed
 (see the crate roots). Run the Rust gate locally before pushing:
