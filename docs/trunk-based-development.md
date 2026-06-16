@@ -64,14 +64,9 @@ gate correctly. Branch protection is still worth adding as a **second layer** th
 blocks direct pushes to `trunk` and requires the checks at the GitHub level. It's a
 *setting*, not a file, so it isn't applied by cloning:
 
-```sh
-gh auth login                      # if not already authenticated
-./scripts/setup-branch-protection.sh   # idempotent; defaults to TimmyMC/PlanBan
-```
-
-Prefer clicking? **Settings → Branches → Add rule** for `trunk` → require pull
-requests and require the four status checks (strict). `enforce_admins` is left off,
-so you can still push a direct hotfix to `trunk` in a pinch.
+**Settings → Branches → Add rule** for `trunk` → require pull requests and require
+the `CI complete` status check (strict). `enforce_admins` is left off, so you can
+still push a direct hotfix to `trunk` in a pinch.
 
 Do **not** also enable GitHub's native "Allow auto-merge" and click *Enable
 auto-merge* on a PR before protection lists the required checks — that path merges

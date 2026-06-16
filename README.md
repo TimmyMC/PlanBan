@@ -10,7 +10,7 @@ workflow engine that guarantees the mandatory steps happen — while you stay in
 loop.
 
 Clabby is **not** an autonomous agent runner. It enforces your workflow; you do the
-thinking. See [`CONSTITUTION.md`](./CONSTITUTION.md) for the principles that govern
+thinking. See [`CONSTITUTION.md`](./docs/CONSTITUTION.md) for the principles that govern
 every change.
 
 ![The Clabby board — Tauri + React (M3)](docs/board.png)
@@ -49,25 +49,25 @@ Requires the Rust toolchain and Node.js (the demo's fake tracker is a node scrip
 
 ```sh
 cargo build
-cd examples/jira
+cd docs/examples/jira
 
 # Pull issues from the (fake) tracker and show the board
-../../target/debug/clabby sync
-../../target/debug/clabby status
+../../../target/debug/clabby sync
+../../../target/debug/clabby status
 
 # Transition an issue from Clabby (pushes back to the tracker)
-../../target/debug/clabby issue set-status PROJ-12 "In Review"
+../../../target/debug/clabby issue set-status PROJ-12 "In Review"
 
 # Run a managed agent for an issue, streaming its output
-../../target/debug/clabby session spawn PROJ-12 --agent echo
+../../../target/debug/clabby session spawn PROJ-12 --agent echo
 
 # Simulate someone else changing the tracker, then re-sync to see divergence
 node ../tracker.mjs issues.json transition PROJ-44 "Done"
-../../target/debug/clabby sync
-../../target/debug/clabby status        # PROJ-44 shows "! diverged(->Done)"
+../../../target/debug/clabby sync
+../../../target/debug/clabby status        # PROJ-44 shows "! diverged(->Done)"
 ```
 
-`examples/github/` is the **same engine** driven by a deliberately different tracker
+`docs/examples/github/` is the **same engine** driven by a deliberately different tracker
 shape (top-level array, flat `state`, label objects) — proof that adopting a new
 workflow needs config changes only, never code (Constitution §11).
 

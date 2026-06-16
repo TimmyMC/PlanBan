@@ -1,6 +1,6 @@
 #!/bin/sh
-# Opt-in pre-push gate. Enable once with:
-#   git config core.hooksPath .githooks
+# Opt-in pre-push gate. Enabled (with the pre-commit hook) via:
+#   git config core.hooksPath scripts/hooks   (run ./scripts/install-hooks.sh)
 # Runs the same checks as CI so a red push never reaches the remote (Article 12).
 set -e
 echo "pre-push: running local CI..."

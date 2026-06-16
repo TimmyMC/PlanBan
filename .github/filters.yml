@@ -1,0 +1,46 @@
+# Path filters for the All-checks workflow (consumed by dorny/paths-filter in the
+# `changes` job). Defined here, once, with YAML anchors so `any_code` is derived from
+# the others and can never drift out of sync.
+#
+# Change-to-impact matrix (jobs that run when a path changes):
+#
+#   Path changed                          | Lint&test | Coverage | Frontend | Desktop | Gate integrity
+#   --------------------------------------|-----------|----------|----------|---------|---------------
+#   crates/**, Cargo.*, diesel.toml       |    run    |   run    |    -     |    -    |     run
+#   rust-toolchain.toml                   |    run    |   run    |    -     |   run   |     run
+#   ui/**                                 |    -      |    -     |   run    |   run   |     run
+#   src-tauri/**                          |    -      |    -     |    -     |   run   |     run
+#   scripts/**, .github/**, use-cases.md  |    -      |    -     |    -     |    -    |     run
+#   docs/** (incl. examples), other *.md  |    -      |    -     |    -     |    -    |      -
+#
+# The `ci-complete` aggregator always runs and is the single required status check, so a
+# PR that skips every job above still reports green.
+
+# The workspace: the crates plus the root files Cargo/rustup force to live at the repo
+# root (manifest, lockfile, toolchain). diesel.toml lives under crates/core, so crates/**
+# already covers it. `&toolchain` is shared with the desktop crate below.
+rust: &rust
+  - 'crates/**'
+  - 'Cargo.toml'
+  - 'Cargo.lock'
+  - &toolchain 'rust-toolchain.toml'
+
+frontend: &frontend
+  - 'ui/**'
+
+# The Tauri shell is a separate crate outside the workspace. It embeds ui/dist at compile
+# time (so it depends on the frontend) and compiles with the same pinned toolchain.
+desktop:
+  - 'src-tauri/**'
+  - *frontend
+  - *toolchain
+
+# Gate-integrity must run whenever any gate-relevant file changes. Built from the anchors
+# above plus the non-build paths, so adding a path to `rust`/`frontend` updates this too.
+any_code:
+  - *rust
+  - *frontend
+  - 'src-tauri/**'
+  - 'scripts/**'
+  - '.github/**'
+  - 'docs/use-cases.md'

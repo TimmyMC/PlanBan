@@ -2,7 +2,7 @@
 
 How Clabby proves it works. This is the vocabulary every test slots into, and — more
 importantly — **which gate catches what**, so a red CI run tells you exactly where the missing
-test belongs. It exists because [Constitution §9](../CONSTITUTION.md) ("regressions are guarded
+test belongs. It exists because [Constitution §9](CONSTITUTION.md) ("regressions are guarded
 by tests, not vigilance") demands that coverage be *machine-enforced*, not remembered. Prose
 documents; CI enforces. Nothing below depends on someone reading this file — the gates run
 whether or not anyone does.

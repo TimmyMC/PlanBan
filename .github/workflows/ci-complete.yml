@@ -1,4 +1,4 @@
-name: CI
+name: CI complete
 
 # PRs only. Trunk changes exclusively via auto-merged PRs whose CI already
 # passed, and the ruleset requires branches be up to date before merging (so the
@@ -44,27 +44,9 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          filters: |
-            rust:
-              - 'crates/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rust-toolchain.toml'
-            frontend:
-              - 'ui/**'
-            desktop:
-              - 'src-tauri/**'
-              - 'ui/**'
-            any_code:
-              - 'crates/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rust-toolchain.toml'
-              - 'ui/**'
-              - 'src-tauri/**'
-              - 'scripts/**'
-              - '.github/**'
-              - 'docs/use-cases.md'
+          # Filters live in .github/filters.yml (DRY'd with YAML anchors; see the
+          # change-to-impact matrix there).
+          filters: .github/filters.yml
 
   # Stops an agent from making CI green by deleting a test or loosening a gate
   # instead of fixing the code. Rides the CI-success rail: if this fails, the
@@ -296,16 +278,16 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
   # Aggregator: always runs so branch protection has a single stable required
-  # check ("All checks") even when upstream jobs are skipped for docs-only PRs.
+  # check ("CI complete") even when upstream jobs are skipped for docs-only PRs.
   # Passes when every upstream job either succeeded or was skipped.
-  # Branch protection must require this job's name — see setup-branch-protection.sh.
-  all-checks:
-    name: All checks
+  # Branch protection must require this job's name ("CI complete").
+  ci-complete:
+    name: CI complete
     needs: [changes, gate-integrity, check, coverage, frontend, desktop]
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: All checks passed or were skipped
+      - name: CI complete — all checks passed or were skipped
         run: |
           echo '${{ toJSON(needs) }}' \
             | jq -e '[.[].result] | all(. == "success" or . == "skipped")'

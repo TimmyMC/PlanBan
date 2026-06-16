@@ -16,7 +16,7 @@ Capture when **all** of these hold:
 - It's **non-obvious** — not derivable by reading the code, `CLAUDE.md`, or git history.
 - It's **procedural or a gotcha** — a sequence of steps, a sharp edge, a "do X not Y".
 
-Do **not** capture: one-off facts, anything already in `CLAUDE.md`/`CONSTITUTION.md`/the
+Do **not** capture: one-off facts, anything already in `CLAUDE.md`/`docs/CONSTITUTION.md`/the
 code, secrets, or transient state. If it belongs in `CLAUDE.md` (always-loaded project
 rules), put it there instead — skills are for on-demand, task-specific know-how.
 

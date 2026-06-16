@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Offline fake tracker for the black-box tests (mirrors examples/tracker.mjs).
+// Offline fake tracker for the black-box tests (mirrors docs/examples/tracker.mjs).
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const [dataFile, cmd, ...rest] = process.argv.slice(2);
