@@ -153,6 +153,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-machete
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-machete
+
       - name: Set up Node (offline fake tracker in the black-box tests)
         uses: actions/setup-node@v6
         with:
@@ -163,6 +168,13 @@ jobs:
 
       - name: Clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # Fail on unused dependencies. False positives (deps pulled in for a
+      # feature with no direct code reference, e.g. libsqlite3-sys/bundled) are
+      # listed under [package.metadata.cargo-machete] ignored in the crate's
+      # Cargo.toml rather than suppressed here.
+      - name: Unused dependencies (cargo-machete)
+        run: cargo machete
 
       - name: Test
         run: cargo test --workspace
