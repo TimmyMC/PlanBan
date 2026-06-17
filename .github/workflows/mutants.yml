@@ -1,0 +1,101 @@
+name: Mutation testing
+
+# Weekly mutation testing of the engine (`clabby-core`) with cargo-mutants (issue #23).
+# Mutation testing validates that the suite *catches* bugs, not just that lines execute —
+# it's the complement to the line-coverage floor. It's far too slow for per-PR CI, so it
+# runs on a weekly schedule and is report-only: results are surfaced as a job summary plus
+# an uploaded `mutants.out` artifact. (Auto-filing a tracking issue is a planned follow-up.)
+#
+# Runs on windows-latest to match the only platform the suite is validated on (the rest of
+# CI is windows-only, and runner.rs has a load-bearing cfg(windows) shell path) — so the
+# unmutated baseline that cargo-mutants requires is known-green.
+
+on:
+  schedule:
+    # Friday evenings, 22:00 UTC.
+    - cron: "0 22 * * 5"
+  workflow_dispatch: {}
+
+# Report-only: needs nothing beyond reading the repo.
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  mutants:
+    name: cargo-mutants (core)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Pinned to match rust-toolchain.toml — bump both together.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.96.0
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      # Pinned for week-over-week reproducibility (mutation operators change between
+      # releases). Bump deliberately alongside reviewing any resulting churn.
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants@27.1.0
+
+      - name: Run cargo-mutants on crates/core
+        shell: pwsh
+        run: |
+          cargo mutants -d crates/core --in-place -vV
+          # cargo-mutants exit codes: 0 clean, 1 usage error, 2 missed mutants,
+          # 3 some tests timed out, 4 baseline (unmutated) tests failed.
+          # Report-only: surface missed mutants (2) and timeouts (3) without failing
+          # the run. Only a usage error (1) or a broken baseline (4) is a real failure.
+          if ($LASTEXITCODE -eq 1 -or $LASTEXITCODE -ge 4) { exit $LASTEXITCODE }
+          exit 0
+
+      - name: Write summary
+        if: always()
+        shell: pwsh
+        run: |
+          # cargo-mutants writes mutants.out to the working dir (repo root), even with -d.
+          $out = "mutants.out"
+          function Lines($f) { if (Test-Path $f) { @(Get-Content $f | Where-Object { $_.Trim() -ne "" }) } else { @() } }
+          $missed   = Lines "$out/missed.txt"
+          $caught   = Lines "$out/caught.txt"
+          $timeout  = Lines "$out/timeout.txt"
+          $unviable = Lines "$out/unviable.txt"
+
+          $sum = $env:GITHUB_STEP_SUMMARY
+          Add-Content $sum "## Mutation testing — crates/core"
+          Add-Content $sum ""
+          Add-Content $sum "| Outcome | Count |"
+          Add-Content $sum "| --- | ---: |"
+          Add-Content $sum "| Caught (killed by a test) | $($caught.Count) |"
+          Add-Content $sum "| **Missed (survived — untested behavior)** | **$($missed.Count)** |"
+          Add-Content $sum "| Timeout | $($timeout.Count) |"
+          Add-Content $sum "| Unviable (didn't compile) | $($unviable.Count) |"
+          Add-Content $sum ""
+          if ($missed.Count -gt 0) {
+            Add-Content $sum "<details><summary>Surviving mutants</summary>"
+            Add-Content $sum ""
+            Add-Content $sum '```'
+            $missed | ForEach-Object { Add-Content $sum $_ }
+            Add-Content $sum '```'
+            Add-Content $sum "</details>"
+          } else {
+            Add-Content $sum "No surviving mutants. 🎉"
+          }
+
+      - name: Upload mutants.out
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-out
+          path: mutants.out
+          if-no-files-found: warn
