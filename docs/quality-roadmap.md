@@ -53,8 +53,11 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
   states) both ship. Coverage is tracked **per test type**: Vitest measures units only,
   while Playwright e2e has a separate, report-only track (`ui/coverage-e2e`) that is never
   merged into the unit number.
-- ⬜ **Mutation testing** — a scheduled (weekly) `cargo-mutants` run on `core` (too slow
-  per-PR), surfaced as a report/issue. Validates that tests *catch* bugs, not just execute.
+- 🚧 **Mutation testing** (#23) — a scheduled (weekly) `cargo-mutants` run on `core` (too
+  slow per-PR), in `.github/workflows/mutants.yml` with tuning in `.cargo/mutants.toml`.
+  Validates that tests *catch* bugs, not just execute. v1 is report-only: results land as a
+  `$GITHUB_STEP_SUMMARY` table plus an uploaded `mutants.out` artifact. Auto-filing a
+  tracking issue from the report is the planned follow-up.
 - ⬜ **Secret scanning** — `gitleaks` in CI and pre-commit.
 
 ## Tier 3 — velocity at scale (keep the gates fast)

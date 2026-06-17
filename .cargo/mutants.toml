@@ -1,0 +1,17 @@
+# cargo-mutants tuning (issue #23). Read automatically by `cargo mutants`.
+#
+# v1 is deliberately minimal: exclude only indisputably generated code, and let the
+# first weekly report tell us what's actually noise before widening. See the weekly
+# workflow in .github/workflows/mutants.yml and docs/quality-roadmap.md (Tier 2).
+
+# Generated / non-logic code — mutating it tests nothing real.
+#   - src/schema.rs is emitted by `diesel print-schema` (regenerated, not hand-written).
+#   - migrations/ are versioned SQL, not Rust logic.
+exclude_globs = ["src/schema.rs", "migrations/**"]
+
+# The crates/core e2e test (`full_pipeline`) does real git + temp-SQLite work, so a
+# mutated build's tests run slower than a trivial unit suite. Give the auto-derived
+# per-test timeout headroom so a merely-slower mutant isn't miscounted as a "timeout".
+# Tune from the measured local baseline if false timeouts appear (see the plan's
+# Verification notes); 5x is a conservative starting point, not a measured constant.
+timeout_multiplier = 5.0
