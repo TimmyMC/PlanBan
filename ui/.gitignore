@@ -3,6 +3,7 @@ dist
 test-results
 playwright-report
 coverage
+coverage-e2e
 .playwright
 *.local
 board.png

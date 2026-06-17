@@ -1,52 +1,9 @@
-import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
-import { api, isTauri } from "@/api";
 import { Board } from "@/components/Board";
 import { Button } from "@/components/ui/button";
-import type { BoardData } from "@/types";
+import { useBoard } from "@/useBoard";
 
 export default function App() {
-  const [data, setData] = useState<BoardData | null>(null);
-  const [banner, setBanner] = useState<{ key: string; text: string } | null>(null);
-
-  async function refresh() {
-    setData(await api.getBoard());
-  }
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: load the board once on mount.
-  useEffect(() => {
-    void refresh();
-  }, []);
-
-  // Subscribe to real-time push events from the Rust EventBus (§3, §8).
-  // Guarded by `isTauri` so the `listen` call is never reached in browser / Playwright.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: subscribe once on mount.
-  useEffect(() => {
-    if (!isTauri) return;
-    const p = listen("clabby://event", () => {
-      void refresh();
-    });
-    return () => {
-      void p.then((f) => f());
-    };
-  }, []);
-
-  async function onMove(key: string, to: string) {
-    const res = await api.move(key, to);
-    if (!res.completed && res.blocked) {
-      setBanner({ key, text: `Blocked moving ${key} → ${to}: ${res.blocked.error}.` });
-    } else {
-      setBanner(null);
-    }
-    await refresh();
-  }
-
-  async function onOverride() {
-    if (!banner) return;
-    await api.override(banner.key, "overridden from the board");
-    setBanner(null);
-    await refresh();
-  }
+  const { data, banner, sync, onMove, onOverride } = useBoard();
 
   if (!data) {
     return <div className="p-8 text-muted-foreground">Loading…</div>;
@@ -58,14 +15,7 @@ export default function App() {
         <h1 className="text-lg font-semibold">
           Clabby <span className="text-sm font-normal text-muted-foreground">command center</span>
         </h1>
-        <Button
-          onClick={async () => {
-            await api.sync();
-            await refresh();
-          }}
-        >
-          Sync
-        </Button>
+        <Button onClick={sync}>Sync</Button>
       </header>
 
       {banner && (

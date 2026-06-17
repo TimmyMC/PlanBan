@@ -9,7 +9,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 ## Already in place (baseline)
 
 - ✅ `Lint & test` (cargo fmt/clippy `-D warnings`/test)
-- ✅ `Coverage` floor (`cargo-llvm-cov --fail-under-lines 80`)
+- ✅ `Coverage` floor (`cargo-llvm-cov --fail-under-lines`; floors centralized in `.github/coverage-thresholds.json`)
 - ✅ `Frontend` (tsc + Biome + Playwright) and a `Desktop app` build gate
 - ✅ Panic discipline in core (`unwrap_used`/`expect_used`/`dbg_macro` denied outside tests)
 - ✅ Trunk-based auto-merge gated on the full CI workflow
@@ -39,20 +39,31 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 
 ## Tier 2 — test depth (coverage ≠ confidence)
 
-- ⬜ **Diff coverage** — gate on changed-line coverage per PR (not just the global floor),
-  and ratchet the global floor upward over time.
-- 🚧 **Frontend unit/component tests** — Vitest is wired (jsdom + Testing Library),
-  covering the `mockApi` seam and `IssueCard`, and runs in the `Frontend` CI job (`pnpm
-  test`). *Still to do:* a frontend coverage gate and `axe-core` a11y assertions in the
-  Playwright suite.
+- ✅ **Coverage floors + per-PR visibility** — the global line floors are ratcheted
+  (Rust 80 → 85) and centralized in `.github/coverage-thresholds.json` (one place to
+  raise; read by both `ui/vite.config.ts` and the Rust gate in `ci-complete.yml`). Each
+  run's coverage table is posted to `$GITHUB_STEP_SUMMARY` (Checks → job → Summary), so the
+  actual level is visible on every PR without Codecov. *Considered and dropped:* a per-PR
+  *diff*-coverage gate (`diff-cover`) — YAGNI at 85–90% floors, where the absolute floor
+  already catches new under-tested code.
+- ✅ **Frontend unit/component tests** — Vitest (jsdom + Testing Library) covers the
+  `mockApi` seam, the components, and the `useBoard` handler logic; the coverage gate
+  (`vite.config.ts` thresholds, sourced from `.github/coverage-thresholds.json`) and
+  `axe-core` a11y assertions (asserted across resting / gated-banner / post-override
+  states) both ship. Coverage is tracked **per test type**: Vitest measures units only,
+  while Playwright e2e has a separate, report-only track (`ui/coverage-e2e`) that is never
+  merged into the unit number.
 - ⬜ **Mutation testing** — a scheduled (weekly) `cargo-mutants` run on `core` (too slow
   per-PR), surfaced as a report/issue. Validates that tests *catch* bugs, not just execute.
 - ⬜ **Secret scanning** — `gitleaks` in CI and pre-commit.
 
 ## Tier 3 — velocity at scale (keep the gates fast)
 
-- ⬜ **Path-filtered jobs** — run `Desktop app` / `Frontend` only when `ui/**` or
-  `src-tauri/**` change, so pure-Rust PRs aren't taxed by the frontend/Tauri build.
+- ✅ **Path-filtered jobs** (#49) — a `changes` job (`dorny/paths-filter@v3`) maps changed
+  paths to `rust` / `frontend` / `desktop` / `any_code` (filters in `.github/filters.yml`);
+  each downstream job gates on its output, so docs-only PRs skip the Rust compile, coverage,
+  and Playwright suite. The `CI complete` aggregator passes when every job succeeded or was
+  skipped, giving branch protection one stable required check.
 - ⬜ **Faster tests + caching** — `cargo-nextest` (speed + native flaky-retry + JUnit),
   `sccache`; Playwright `retries` + trace-on-failure artifact upload.
 - ✅ **CI concurrency** — `concurrency: { group: <ref>, cancel-in-progress: true }` so

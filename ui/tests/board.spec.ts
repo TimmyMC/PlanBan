@@ -1,5 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+// `test`/`expect` come from the coverage fixture so every spec contributes to
+// the e2e coverage track (tests/fixtures.ts), kept separate from unit coverage.
+import { expect, test } from "./fixtures";
 
 // dnd-kit needs a real pointer drag past its activation distance, in steps.
 async function dragCardToColumn(page: Page, cardId: string, colId: string) {

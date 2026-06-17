@@ -60,7 +60,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write  # post the "apply gate-change-approved" comment on failure
+      # PR comments go through the issues-comments endpoint, but for a PR that
+      # endpoint is governed by pull-requests (not issues) write — without it the
+      # "apply gate-change-approved" comment POST 403s.
+      pull-requests: write
     if: needs.changes.outputs.any_code == 'true' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
     steps:
       - uses: actions/checkout@v6
@@ -77,16 +80,19 @@ jobs:
         run: |
           git fetch --no-tags origin "$BASE_REF"
           set +e
-          output=$(scripts/gate-guard.sh "origin/$BASE_REF")
+          output=$(GATE_GUARD_FILES_OUT=guard-files.txt scripts/gate-guard.sh "origin/$BASE_REF")
           exit_code=$?
           set -e
           echo "$output"
-          # Capture the bullet-point findings for the PR comment
+          # Capture the bullet-point findings + the flagged files (for diff deeplinks).
           findings=$(printf '%s\n' "$output" | grep '^  - ' || true)
           {
             echo "findings<<GATE_FINDINGS_END"
             printf '%s\n' "$findings"
             echo "GATE_FINDINGS_END"
+            echo "files<<GATE_FILES_END"
+            cat guard-files.txt 2>/dev/null || true
+            echo "GATE_FILES_END"
           } >> "$GITHUB_OUTPUT"
           exit "$exit_code"
 
@@ -96,7 +102,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
           FINDINGS: ${{ steps.guard.outputs.findings }}
+          FILES: ${{ steps.guard.outputs.files }}
         shell: bash
         run: |
           MARKER="<!-- gate-change-required -->"
@@ -104,12 +112,25 @@ jobs:
           existing=$(gh api "repos/$REPO/issues/$PR/comments" \
             --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
           [ -n "$existing" ] && exit 0
-          body=$(printf '%s\n' "$MARKER" \
-            "## ⚠️ Gate integrity blocked this PR" "" \
-            "The guard detected a change to CI/test machinery that could weaken the gate:" "" \
-            "\`\`\`" "$FINDINGS" "\`\`\`" "" \
-            "**To unblock:** apply the \`gate-change-approved\` label — CI will re-run and this check will clear." "" \
+          # Build clickable deeplinks to each flagged file's diff. GitHub anchors a
+          # file on the Files-changed tab as #diff-<sha256(path)>.
+          links=""
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            anchor=$(printf '%s' "$f" | sha256sum | cut -d' ' -f1)
+            links+="- [\`$f\`]($PR_URL/files#diff-$anchor)"$'\n'
+          done <<< "$FILES"
+          # Assemble the body line-by-line (indentation-independent — no heredoc).
+          lines=("$MARKER"
+            "## ⚠️ Gate integrity blocked this PR" ""
+            "The guard detected a change to CI/test machinery that could weaken the gate:" ""
+            '```' "$FINDINGS" '```' "")
+          if [ -n "$links" ]; then
+            lines+=("**Jump to the diff of the flagged files:**" "" "$links")
+          fi
+          lines+=("**To unblock:** apply the \`gate-change-approved\` label — CI will re-run and this check will clear." ""
             "If the change was unintentional (test removed, threshold lowered), restore the original gate instead.")
+          body=$(printf '%s\n' "${lines[@]}")
           jq -n --arg body "$body" '{body: $body}' \
             | gh api "repos/$REPO/issues/$PR/comments" -X POST --input -
 
@@ -170,10 +191,27 @@ jobs:
         with:
           node-version: "22"
 
-      # Gate: line coverage must stay at/above the bar (the real gate), and emit
-      # lcov for the Codecov badge. Baseline at last check was ~82%.
-      - name: Coverage (fail under 80% lines)
-        run: cargo llvm-cov --workspace --fail-under-lines 80 --lcov --output-path lcov.info
+      # Gate: line coverage must stay at/above the floor (the real gate). The floor
+      # is centralized in .github/coverage-thresholds.json (shared with the frontend
+      # Vitest thresholds via ui/vite.config.ts) so there's one place to ratchet.
+      # Two-phase llvm-cov: collect once, then emit lcov AND a text summary without
+      # re-running tests (--lcov and --summary-only can't be combined in one call).
+      # lcov is kept for the best-effort Codecov upload below (issue #30).
+      - name: Coverage (fail under floor)
+        shell: bash
+        run: |
+          FLOOR=$(jq .rust_lines .github/coverage-thresholds.json)
+          cargo llvm-cov --workspace --no-report
+          cargo llvm-cov report --lcov --output-path lcov.info
+          # Surface the level on the PR (Checks → Coverage → Summary). $GITHUB_STEP_SUMMARY
+          # is Markdown, so fence the table; this write must not mask the gate's exit code.
+          {
+            echo "### Rust coverage (floor ${FLOOR}% lines)"
+            echo '```'
+            cargo llvm-cov report --summary-only
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cargo llvm-cov report --summary-only --fail-under-lines "$FLOOR"
 
       # Best-effort upload for the README badge; never fails the gate (so a
       # missing CODECOV_TOKEN can't block merges).
@@ -213,14 +251,38 @@ jobs:
       - name: Lint · format (Biome)
         run: pnpm run lint
 
+      # Vitest enforces the unit-coverage thresholds (centralized in
+      # .github/coverage-thresholds.json via vite.config.ts). Tee the run to a log,
+      # then append a fenced coverage table to the PR step summary while preserving
+      # the gate's exit code (a threshold breach must still fail the step).
       - name: Unit tests + coverage (Vitest)
-        run: pnpm test:cov
+        shell: bash
+        run: |
+          status=0
+          pnpm test:cov 2>&1 | tee /tmp/vitest-cov.log || status=$?
+          {
+            echo '### Frontend unit coverage (Vitest)'
+            echo '```'
+            cat /tmp/vitest-cov.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium
 
       - name: E2E tests
         run: pnpm run test:e2e
+
+      # Separate, report-only e2e coverage track (not gated): uploaded as an
+      # artifact so it can be inspected and later graduate to its own gate.
+      - name: Upload e2e coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-coverage
+          path: ui/coverage-e2e
+          retention-days: 7
 
       # Reliability: on a failed (retried) run, keep the Playwright trace/report
       # so the failure is debuggable instead of a silent flake.
