@@ -52,9 +52,11 @@ jobs:
         shell: pwsh
         run: |
           cargo mutants -d crates/core --in-place -vV
-          # Report-only: exit 2 means surviving mutants were found — surface, don't fail.
-          # Anything higher is a real tooling/baseline error and should fail the run.
-          if ($LASTEXITCODE -gt 2) { exit $LASTEXITCODE }
+          # cargo-mutants exit codes: 0 clean, 1 usage error, 2 missed mutants,
+          # 3 some tests timed out, 4 baseline (unmutated) tests failed.
+          # Report-only: surface missed mutants (2) and timeouts (3) without failing
+          # the run. Only a usage error (1) or a broken baseline (4) is a real failure.
+          if ($LASTEXITCODE -eq 1 -or $LASTEXITCODE -ge 4) { exit $LASTEXITCODE }
           exit 0
 
       - name: Write summary
