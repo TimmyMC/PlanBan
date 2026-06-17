@@ -12,8 +12,8 @@ name: Mutation testing
 
 on:
   schedule:
-    # Mondays 06:00 UTC.
-    - cron: "0 6 * * 1"
+    # Friday evenings, 22:00 UTC.
+    - cron: "0 22 * * 5"
   workflow_dispatch: {}
 
 # Report-only: needs nothing beyond reading the repo.
