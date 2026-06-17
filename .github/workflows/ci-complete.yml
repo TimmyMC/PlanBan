@@ -7,7 +7,11 @@ name: CI complete
 # doubles every check on a branch that has an open PR.
 # `labeled`/`unlabeled` are included so that applying the `gate-change-approved`
 # label re-runs CI — that re-evaluates the Gate integrity job, which reads the
-# label, and lets a green run flow into auto-merge.
+# label, and lets a green run flow into auto-merge. On a pure label event only
+# Gate integrity re-runs: the expensive jobs (check/coverage/frontend/desktop)
+# skip (`github.event.action != 'labeled'/'unlabeled'`) since no code changed and
+# their prior results stand — the `CI complete` aggregator passes on skipped, so
+# auto-merge still fires without burning a full matrix on a label toggle.
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
@@ -140,7 +144,7 @@ jobs:
     # Windows matches the dev environment and the cfg(windows) cmd-quoting path.
     # (Adding an ubuntu leg to exercise the sh path is tracked in BACKLOG.md.)
     runs-on: windows-latest
-    if: needs.changes.outputs.rust == 'true'
+    if: needs.changes.outputs.rust == 'true' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
       - uses: actions/checkout@v6
 
@@ -183,7 +187,7 @@ jobs:
     name: Coverage
     needs: changes
     runs-on: windows-latest
-    if: needs.changes.outputs.rust == 'true'
+    if: needs.changes.outputs.rust == 'true' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
       - uses: actions/checkout@v6
 
@@ -239,7 +243,7 @@ jobs:
     name: Frontend
     needs: changes
     runs-on: windows-latest
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.frontend == 'true' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     defaults:
       run:
         working-directory: ui
@@ -315,7 +319,7 @@ jobs:
     # deps), so the workspace lint/test/coverage jobs never touch it. This job
     # is what actually gates the desktop shell: it must compile + pass clippy.
     runs-on: windows-latest
-    if: needs.changes.outputs.desktop == 'true'
+    if: needs.changes.outputs.desktop == 'true' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
       - uses: actions/checkout@v6
 
