@@ -205,7 +205,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-cron-scheduler",
- "tracing",
  "tracing-subscriber",
  "trycmd",
 ]
@@ -214,7 +213,6 @@ dependencies = [
 name = "clabby-core"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "chrono",
  "diesel",
  "diesel-async",
