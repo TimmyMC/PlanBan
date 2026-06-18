@@ -67,6 +67,18 @@ async fn migrations_apply_and_every_table_round_trips() {
         db.get_issue("K-1").await.unwrap().unwrap().local_status,
         "doing"
     );
+    // An optional timestamp must survive the round-trip (it's parsed back from
+    // stored RFC3339 text): persist a `last_synced` and read it back as Some.
+    let mut synced = Issue::new("K-2", "summary", "todo");
+    synced.last_synced = Some(Utc::now());
+    db.upsert_issue(&synced).await.unwrap();
+    assert!(db
+        .get_issue("K-2")
+        .await
+        .unwrap()
+        .unwrap()
+        .last_synced
+        .is_some());
 
     // sessions + session_logs
     let session = db
@@ -87,6 +99,8 @@ async fn migrations_apply_and_every_table_round_trips() {
         .unwrap();
     assert_eq!(db.tail_logs(session.id, 10).await.unwrap().len(), 1);
     assert_eq!(db.list_sessions_for_issue("K-1").await.unwrap().len(), 1);
+    // The global session list (CLI `sessions` command) must surface it too.
+    assert_eq!(db.list_sessions().await.unwrap().len(), 1);
     db.update_session_status(session.id, SessionStatus::Exited, Some(0))
         .await
         .unwrap();
@@ -103,10 +117,13 @@ async fn migrations_apply_and_every_table_round_trips() {
     assert!(db.worktree_for_issue("K-1").await.unwrap().is_some());
     assert_eq!(db.list_worktrees().await.unwrap().len(), 1);
 
-    // sync_log + cron_runs + audit_log
+    // sync_log + cron_runs + audit_log. Assert the counts move from 0 -> 1 so a
+    // stubbed counter (always returning a constant) can't satisfy the assertion.
     db.insert_sync_log(3, 1, Some("ok")).await.unwrap();
+    assert_eq!(db.count_cron_runs().await.unwrap(), 0);
     db.insert_cron_run("sync", true, None).await.unwrap();
     assert_eq!(db.count_cron_runs().await.unwrap(), 1);
+    assert_eq!(db.count_audit("override").await.unwrap(), 0);
     db.insert_audit("override", Some("K-1"), Some("reason"), None)
         .await
         .unwrap();
@@ -138,4 +155,20 @@ async fn migrations_apply_and_every_table_round_trips() {
         .await
         .unwrap();
     assert!(db.blocking_step(tr).await.unwrap().is_none()); // no longer 'failed'
+}
+
+/// `Db::connect` creates the database file's parent directory if it's missing —
+/// a config can point `db_path` at a not-yet-existing `.clabby/` dir and connect
+/// must still succeed (it can't open a SQLite file in a nonexistent directory).
+#[tokio::test]
+async fn connect_creates_missing_parent_directories() {
+    let tmp = tempfile::tempdir().unwrap();
+    let nested = tmp.path().join("does").join("not").join("exist");
+    assert!(!nested.exists());
+    let db = Db::connect(nested.join("clabby.db")).await.unwrap();
+    // A working connection proves the directory was created and migrations ran.
+    db.upsert_issue(&Issue::new("K-1", "s", "todo"))
+        .await
+        .unwrap();
+    assert_eq!(db.list_issues().await.unwrap().len(), 1);
 }

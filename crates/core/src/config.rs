@@ -230,3 +230,143 @@ impl Config {
             .find(|t| t.from == from && t.to == to)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A minimal but valid config. `transitions` is appended verbatim so each test
+    /// can declare exactly the from/to pairs it asserts on.
+    fn cfg_with_transitions(transitions: &str) -> Config {
+        let toml = format!(
+            r#"
+            [project]
+            name = "t"
+            [tracker]
+            fetch = "echo"
+            [tracker.map]
+            items = "i"
+            key = "k"
+            summary = "s"
+            status = "st"
+            {transitions}
+            "#
+        );
+        toml::from_str(&toml).expect("test config should parse")
+    }
+
+    #[test]
+    fn find_transition_matches_on_both_endpoints() {
+        // Three transitions that share endpoints so a lookup that ignores either
+        // `from` or `to` (a flipped `==`/`&&`) would pick the wrong one.
+        let cfg = cfg_with_transitions(
+            r#"
+            [[transitions]]
+            from = "A"
+            to = "B"
+            [[transitions]]
+            from = "B"
+            to = "C"
+            [[transitions]]
+            from = "A"
+            to = "C"
+            "#,
+        );
+
+        // Exact match on both endpoints picks the right transition.
+        assert_eq!(
+            cfg.find_transition("A", "B").map(|t| t.to.as_str()),
+            Some("B")
+        );
+        assert_eq!(
+            cfg.find_transition("A", "C").map(|t| t.to.as_str()),
+            Some("C")
+        );
+        assert_eq!(
+            cfg.find_transition("B", "C").map(|t| t.from.as_str()),
+            Some("B")
+        );
+
+        // No transition matches `from` alone (kills `to ==`/`&&`->`||`): a config
+        // has A->B and A->C, but no A->Z.
+        assert!(cfg.find_transition("A", "Z").is_none());
+        // No transition matches `to` alone (kills `from ==`/`&&`->`||`): C is a
+        // valid target, but never from Z.
+        assert!(cfg.find_transition("Z", "C").is_none());
+        // Nothing matches at all.
+        assert!(cfg.find_transition("X", "Y").is_none());
+    }
+
+    #[test]
+    fn validate_rejects_empty_fetch() {
+        let mut cfg = cfg_with_transitions("");
+        cfg.tracker.fetch = "   ".to_string(); // whitespace-only is still "empty"
+        assert!(cfg.validate().is_err());
+
+        cfg.tracker.fetch = "echo".to_string();
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_state_names() {
+        let mut cfg = cfg_with_transitions("");
+        cfg.states = vec![
+            StateConfig {
+                name: "todo".to_string(),
+                category: None,
+            },
+            StateConfig {
+                name: "todo".to_string(),
+                category: None,
+            },
+        ];
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn validate_accepts_unique_state_names() {
+        // The positive case is what pins the duplicate check's `!`: a config whose
+        // states are all distinct must validate. (Dropping the `!` would flip the
+        // check to error on the *first* sight of any state.)
+        let mut cfg = cfg_with_transitions("");
+        cfg.states = vec![
+            StateConfig {
+                name: "todo".to_string(),
+                category: None,
+            },
+            StateConfig {
+                name: "done".to_string(),
+                category: None,
+            },
+        ];
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn db_path_defaults_when_unspecified() {
+        // ProjectConfig omits db_path -> the serde default fills it in.
+        let cfg = cfg_with_transitions("");
+        assert_eq!(cfg.project.db_path, ".clabby/clabby.db");
+    }
+
+    #[test]
+    fn steps_are_required_by_default() {
+        // A step that omits `required` must default to true: required steps gate
+        // the transition, so the safe default is the gating one (§2).
+        let cfg = cfg_with_transitions(
+            r#"
+            [[transitions]]
+            from = "A"
+            to = "B"
+            [[transitions.steps]]
+            id = "check"
+            cmd = "echo hi"
+            "#,
+        );
+        let step = &cfg.transitions[0].steps[0];
+        assert!(
+            step.required,
+            "a step without `required` must default to true"
+        );
+    }
+}

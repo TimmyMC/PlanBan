@@ -176,6 +176,34 @@ async fn full_pipeline() {
     assert!(!p1row.sessions.is_empty());
 }
 
+/// An item with no key isn't actionable and must be skipped during sync — only
+/// the well-formed issue is counted/persisted.
+#[tokio::test]
+async fn sync_skips_items_without_a_key() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let issues_file = root.join("issues.json");
+
+    // One valid issue and one with an empty key.
+    std::fs::write(
+        &issues_file,
+        r#"{ "issues": [
+            { "key": "", "fields": { "summary": "no key", "status": { "name": "To Do" } } },
+            { "key": "PROJ-9", "fields": { "summary": "real", "status": { "name": "To Do" } } }
+        ] }"#,
+    )
+    .unwrap();
+
+    let config = make_config(root, &issues_file);
+    let db = Db::connect(config.db_file()).await.unwrap();
+    let bus = EventBus::new();
+
+    let out = sync::sync(&db, &config, &bus).await.unwrap();
+    assert_eq!(out.fetched, 1, "the empty-key item must be skipped");
+    assert!(db.get_issue("PROJ-9").await.unwrap().is_some());
+    assert_eq!(db.list_issues().await.unwrap().len(), 1);
+}
+
 async fn init_git_repo(root: &Path) {
     // -b main needs git >= 2.28; fall back is not needed on modern installs.
     run_capture("git init -b main", Some(root)).await.unwrap();
