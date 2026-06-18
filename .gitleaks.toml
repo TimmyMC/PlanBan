@@ -3,10 +3,10 @@
 
 title = "Gitleaks config"
 description = "Secret scanning configuration for clabby"
-version = "8.21.2"
 
 # Extend the default ruleset
-extend = "gitleaks"
+[extend]
+useDefault = true
 
 # Define allowlist patterns (false positives that should be ignored)
 [allowlist]
@@ -20,12 +20,3 @@ paths = [
 ]
 commits = []
 repos = []
-
-# Configure what counts as a secret
-[diff]
-# Scan staged changes during pre-commit
-staged = true
-
-[report]
-# Output format for reports
-format = "sarif"
