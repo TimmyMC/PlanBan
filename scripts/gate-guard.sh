@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 #
 # Gate guard (Constitution §9). Fails a PR that *weakens* the test/gate surface
-# unless the change is explicitly approved by the owner via the
-# `gate-change-approved` label. The point is to stop an agent from making CI
-# green by deleting a test, disabling a check, or loosening a threshold instead
-# of fixing the code — and to route any deliberate strictness change through a
-# human decision rather than letting it slip in silently.
+# unless the change is explicitly approved by the owner via an approving PR review
+# (identity-bound — not a label the PR's own author could apply). The point is to
+# stop an agent from making CI green by deleting a test, disabling a check, or
+# loosening a threshold instead of fixing the code — and to route any deliberate
+# strictness change through a human decision rather than letting it slip in silently.
 #
 # Detection is heuristic and deliberately errs toward flagging: a false positive
 # costs one label; a false negative lets a gate erode unnoticed. It runs on the
 # raw diff, so it needs no toolchain and is identical locally and in CI.
 #
 #   Usage:  scripts/gate-guard.sh <base-ref>      # e.g. origin/trunk
-#   Env:    GATE_CHANGE_APPROVED=true             # set by CI from the PR label
+#   Env:    GATE_CHANGE_APPROVED=true             # set by CI from an owner approving review
 #           GATE_GUARD_FILES_OUT=<path>           # if set, the unique flagged files
 #                                                 # are written there (CI uses this to
 #                                                 # build deeplinks to each file's diff)
@@ -121,8 +121,9 @@ fi
 cat <<'MSG'
 
 ❌ This PR changes the test/gate surface in a way that could weaken it.
-   If the change is intentional, the repository owner must review it and add the
-   `gate-change-approved` label to this PR (re-running CI), which clears this gate.
+   If the change is intentional, the repository owner must approve this PR with a
+   review (re-running CI), which clears this gate. Approval is an identity-bound
+   owner review — not a label — so an agent cannot self-clear its own gate change.
    Otherwise, restore the test/gate that was removed or loosened.
 MSG
 exit 1

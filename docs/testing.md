@@ -64,9 +64,10 @@ that *weakens* the test/gate surface — deleting a test file, net-removing asse
 skip / focus / ignore markers, lowering a coverage or strictness threshold, dropping
 warnings-as-errors or frozen-lockfile enforcement, editing the gate machinery itself, or
 removing a use-case row. The fix is to make the code pass, not to remove the check. A
-*deliberate* gate change is a human decision: the owner adds the `gate-change-approved` label.
-See the "Gate guard" section of [`CLAUDE.md`](../CLAUDE.md) for the full rule set and the local
-run (`scripts/gate-guard.sh origin/trunk`).
+*deliberate* gate change is a human decision: an **owner approves the PR with a review**
+(identity-bound — not a label an agent could self-apply). See the "Gate guard" section of
+[`CLAUDE.md`](../CLAUDE.md) for the full rule set and the local run
+(`scripts/gate-guard.sh origin/trunk`).
 
 ## The one honest residual
 
