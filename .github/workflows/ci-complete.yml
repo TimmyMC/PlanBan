@@ -141,6 +141,9 @@ jobs:
   secret-scan:
     name: Secret scanning
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v6
         with:
@@ -148,11 +151,8 @@ jobs:
 
       - name: Scan for secrets with gitleaks
         uses: gitleaks/gitleaks-action@v2
-        with:
-          config-path: .gitleaks.toml
-          fail: true
-          verbose: true
-          redact: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   check:
     name: Lint & test
