@@ -168,6 +168,14 @@ pub fn spawn_streaming(
 mod tests {
     use super::*;
 
+    #[test]
+    fn stream_as_str_names_each_stream() {
+        // These strings are persisted with each log line, so they're a stable
+        // contract, not cosmetic.
+        assert_eq!(Stream::Stdout.as_str(), "stdout");
+        assert_eq!(Stream::Stderr.as_str(), "stderr");
+    }
+
     #[tokio::test]
     async fn capture_runs_a_command() {
         let out = run_capture("echo hello-clabby", None).await.unwrap();

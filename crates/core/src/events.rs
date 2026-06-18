@@ -59,3 +59,26 @@ impl Default for EventBus {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn published_event_reaches_a_subscriber() {
+        let bus = EventBus::new();
+        let mut rx = bus.subscribe();
+        bus.publish(Event::SyncCompleted {
+            fetched: 7,
+            diverged: 2,
+        });
+        // A no-op `publish` (the mutant) would leave nothing to receive.
+        match rx.try_recv() {
+            Ok(Event::SyncCompleted { fetched, diverged }) => {
+                assert_eq!(fetched, 7);
+                assert_eq!(diverged, 2);
+            }
+            other => panic!("expected the published event, got {other:?}"),
+        }
+    }
+}
