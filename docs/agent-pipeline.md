@@ -42,12 +42,21 @@ to" is never a control.
 
 **Identities and what each may do** (least privilege):
 
-| Principal | May do | May NOT do |
+| Principal | May do | Its approvals/merges are bounded by |
 | --- | --- | --- |
 | **Owner** (human, browser, 2FA) | clear gate changes; final-approve opus PRs; merge anything | — must never be an agent's credential |
-| **Implementer bot** | branch, push, open draft PRs, comment, non-protected labels | approve, merge, clear a gate, push to trunk |
-| **Reviewer bot** | submit reviews, approve+merge *ordinary* PRs | clear a gate change (not an `OWNERS` login); approve its own work |
-| **CI `GITHUB_TOKEN`** | run checks, read | trigger further workflows; nothing privileged |
+| **Implementer bot** | branch, push, open draft PRs, comment, non-protected labels | *can* submit reviews (PR-write includes that), but its approval is **inert**: not an `OWNERS` login (can't clear a gate), not in `REVIEWER_LOGINS` (can't trigger auto-merge), and GitHub blocks self-approval. Cannot push to trunk or merge. |
+| **Reviewer bot** | submit reviews, approve → auto-merge *ordinary* PRs | cannot clear a gate change (not an `OWNERS` login) or approve its own work |
+| **CI `GITHUB_TOKEN`** | run checks, read | cannot approve PRs at all (GitHub blocks the Actions token), nor trigger further workflows |
+
+> **There is no GitHub permission for "open a PR but never approve."** Reviews live under the same
+> fine-grained `Pull requests: write` scope as creating PRs, so any bot that can open a PR can also
+> *cast* an approval. Containment is therefore by **identity allowlist** (`OWNERS` for gates,
+> `REVIEWER_LOGINS` for merge) plus GitHub's self-approval block — **never** by assuming the token
+> lacks the verb. Two corollaries: (a) require branch-protection approvals from **CODEOWNERS / a
+> specific reviewer**, not "any 1 review," so a stray bot approval can't satisfy the merge rule; and
+> (b) the reviewer must be a real bot PAT/App token, because the Actions `GITHUB_TOKEN` is forbidden
+> from approving at all.
 
 **The injection-resistant floor.** The deterministic gates do not trust agent intent: a hijacked
 agent still cannot make a failing test pass, cannot strip `-D warnings`/a coverage floor without
