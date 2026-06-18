@@ -10,7 +10,7 @@ relaxes them (Constitution §1, §9).
 ```
 issue opened ─►(hook) agent-refine (Sonnet)
    ├─ clear      → complexity:<tier> + acceptance-criteria + status:ready
-   └─ ambiguous  → questions + status:needs-human ─► HUMAN answers ─► requeue
+   └─ ambiguous  → questions + status:needs-decision ─► HUMAN answers ─► requeue
 status:ready ─►(hook) agent-implement (model = tier)  → claims status:in-progress
    └─ draft PR (agent-authored, complexity:<tier>) → CI runs
 PR ─►(hook) agent-review (reviewer = tier+1)
@@ -39,7 +39,7 @@ bursting the usage limit. If a run can't finish (usage limit or transient), the 
 workflow **releases the claim** (`status:in-progress` → `status:deferred`), comments, and exits
 green. The **reconciler** (`reconciler.yml`, every 6h) re-queues `status:deferred`, reclaims stale
 `status:in-progress`, nudges the oldest unrefined issue and un-reviewed PR, and posts a weekly
-quality digest. After `ATTEMPT_CAP` (3) failures an issue goes to `status:needs-human`.
+quality digest. After `ATTEMPT_CAP` (3) failures an issue goes to `status:needs-decision`.
 
 ## Setup (owner, one-time)
 
@@ -65,7 +65,7 @@ The pipeline is **inert until enabled** — merging it changes nothing until you
 ## Labels
 
 Lifecycle: `status:unrefined → status:ready → status:in-progress → (PR) → merged`, with
-`status:needs-human` (blocked on a human) and `status:deferred` (retry) as off-ramps. Routing:
+`status:needs-decision` (blocked on a human) and `status:deferred` (retry) as off-ramps. Routing:
 `complexity:{haiku,sonnet,opus}`, `agent-authored`, `review:{passed,changes-requested}`. Holds:
 `do-not-merge` (human stop). The taxonomy is version-controlled in `.github/labels.yml` and synced
 by `label-sync.yml`.

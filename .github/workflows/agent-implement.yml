@@ -10,7 +10,7 @@ name: Agent · implement
 # status:in-progress so it can't be double-picked. On ANY failure (usage limit or
 # transient) the claim is released and the issue is re-queued — never left stuck —
 # and the workflow still exits green. The reconciler retries status:deferred and
-# reclaims stale claims. After ATTEMPT_CAP failures an issue goes to needs-human.
+# reclaims stale claims. After ATTEMPT_CAP failures an issue goes to needs-decision.
 #
 # Requires repo var AGENTS_ENABLED == 'true', secret CLAUDE_CODE_OAUTH_TOKEN, and
 # secret IMPLEMENTER_TOKEN (a PAT/App token — a PR opened with the default
@@ -148,9 +148,9 @@ jobs:
                     --jq "[.comments[] | select(.body | startswith(\"$MARKER\"))] | length")
           gh issue edit "$N" --remove-label status:in-progress || true
           if [ "$prior" -ge "$(( ATTEMPT_CAP - 1 ))" ]; then
-            gh issue edit "$N" --add-label status:needs-human
+            gh issue edit "$N" --add-label status:needs-decision
             gh issue comment "$N" --body "$MARKER
-            ⚠️ Implementation failed ${ATTEMPT_CAP}× (last run could not complete — usage limit or a real blocker). Labeled \`status:needs-human\` for a human to look."
+            ⚠️ Implementation failed ${ATTEMPT_CAP}× (last run could not complete — usage limit or a real blocker). Labeled \`status:needs-decision\` for a human to look."
           else
             gh issue edit "$N" --add-label status:deferred
             gh issue comment "$N" --body "$MARKER
