@@ -31,6 +31,8 @@ jobs:
           labels=$(gh issue view "$N" --json labels --jq '[.labels[].name] | join(",")')
           case ",$labels," in
             *",status:"*) echo "#$N already has a status label — leaving it."; exit 0 ;;
+            # Tracking issues (e.g. the reconciler's weekly digest) aren't pipeline work.
+            *",roadmap,"*) echo "#$N is a roadmap/tracking issue — not entering the pipeline."; exit 0 ;;
           esac
           gh issue edit "$N" --add-label status:unrefined
           echo "#$N defaulted to status:unrefined."

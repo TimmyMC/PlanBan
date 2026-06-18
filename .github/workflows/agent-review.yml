@@ -11,9 +11,13 @@ name: Agent · review
 # On issues: request changes (stays draft) for the implementer loop to address.
 # opus PRs: the reviewer posts findings but defers the merge decision to a human.
 
+# Triggered when CI completes successfully (so we never review a red/half-built PR
+# — that race is why we don't trigger on raw pull_request events), and on demand
+# via the reconciler's dispatch. The PR is resolved from the CI run's head SHA.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: ["CI complete"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       pr:
@@ -37,17 +41,33 @@ jobs:
     if: >
       vars.AGENTS_ENABLED == 'true' &&
       (github.event_name == 'workflow_dispatch' ||
-       contains(join(github.event.pull_request.labels.*.name, ','), 'agent-authored'))
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'pull_request'))
     steps:
-      - name: Resolve reviewer tier
+      - name: Resolve PR & reviewer tier
         id: pick
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PR: ${{ github.event.inputs.pr || github.event.pull_request.number }}
+          INPUT_PR: ${{ github.event.inputs.pr }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
+          if [ -n "${INPUT_PR:-}" ]; then
+            PR="$INPUT_PR"
+          else
+            PR=$(gh pr list --state open --json number,headRefOid \
+                   --jq "[.[] | select(.headRefOid==\"$RUN_SHA\")][0].number")
+          fi
+          if [ -z "${PR:-}" ] || [ "$PR" = "null" ]; then
+            echo "No PR for this event."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           labels=$(gh pr view "$PR" --json labels --jq '[.labels[].name] | join(",")')
+          # Only review agent-authored PRs.
+          case ",$labels," in
+            *",agent-authored,"*) : ;;
+            *) echo "PR #$PR is not agent-authored — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
           tier=$(printf '%s' "$labels" | tr ',' '\n' | grep '^complexity:' | head -1 || true)
           case "$tier" in
             complexity:haiku)  model="claude-sonnet-4-6"; human="false" ;;
