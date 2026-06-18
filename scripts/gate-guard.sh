@@ -114,7 +114,7 @@ printf '  - %s\n' "${findings[@]}"
 
 if [ "$APPROVED" = "true" ]; then
   echo
-  echo "✔ 'gate-change-approved' is set — the owner accepted this gate change. Allowing."
+  echo "✔ Owner gate approval is present — the owner accepted this gate change. Allowing."
   exit 0
 fi
 
