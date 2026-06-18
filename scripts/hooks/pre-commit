@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 # Clabby pre-commit hook: auto-format staged files so the CI fmt gate (§8/§9)
 # never fails on formatting alone. Rust -> `cargo fmt`; frontend -> Biome.
-# Enabled via `git config core.hooksPath scripts/hooks` (run scripts/install-hooks).
-# Only staged files are touched, and anything reformatted is re-staged.
+# Also scan for secrets with gitleaks. Enabled via `git config core.hooksPath scripts/hooks`
+# (run scripts/install-hooks). Only staged files are touched, and anything reformatted is re-staged.
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
+
+# Check for secrets in staged changes using gitleaks
+if command -v gitleaks &> /dev/null; then
+  if ! gitleaks detect --staged --config .gitleaks.toml --verbose; then
+    echo "pre-commit: gitleaks detected potential secrets in staged changes"
+    exit 1
+  fi
+else
+  echo "pre-commit: gitleaks not installed; skipping secret scanning"
+fi
 
 # Collect staged (added/copied/modified) files, NUL-separated for safe paths.
 mapfile -d '' staged < <(git diff --cached --name-only --diff-filter=ACM -z)
