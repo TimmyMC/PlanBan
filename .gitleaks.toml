@@ -1,0 +1,22 @@
+# Gitleaks configuration for clabby
+# Detects secrets and sensitive information in Git history
+
+title = "Gitleaks config"
+description = "Secret scanning configuration for clabby"
+
+# Extend the default ruleset
+[extend]
+useDefault = true
+
+# Define allowlist patterns (false positives that should be ignored)
+[allowlist]
+regexes = []
+paths = [
+  # gitleaks config itself
+  "^.gitleaks.toml$",
+  # Package lock files (often contain hashes that look like secrets)
+  "^Cargo.lock$",
+  "^pnpm-lock.yaml$",
+]
+commits = []
+repos = []

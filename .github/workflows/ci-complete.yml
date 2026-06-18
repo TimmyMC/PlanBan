@@ -138,6 +138,22 @@ jobs:
           jq -n --arg body "$body" '{body: $body}' \
             | gh api "repos/$REPO/issues/$PR/comments" -X POST --input -
 
+  secret-scan:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets with gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   check:
     name: Lint & test
     needs: changes
@@ -361,7 +377,7 @@ jobs:
   # Branch protection must require this job's name ("CI complete").
   ci-complete:
     name: CI complete
-    needs: [changes, gate-integrity, check, coverage, frontend, desktop]
+    needs: [changes, gate-integrity, secret-scan, check, coverage, frontend, desktop]
     runs-on: ubuntu-latest
     if: always()
     steps:
