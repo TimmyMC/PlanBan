@@ -61,25 +61,25 @@
 
 # ── Area ────────────────────────────────────────────────────────────────────────
 - name: "area:engine"
-  color: "8b949e"
+  color: "ededed"
   description: "Rust core/CLI: crates/core, crates/cli."
 - name: "area:frontend"
-  color: "8b949e"
+  color: "ededed"
   description: "React/TypeScript UI: ui/."
 - name: "area:desktop"
-  color: "8b949e"
+  color: "ededed"
   description: "Tauri desktop shell: src-tauri/."
 - name: "area:ci"
-  color: "8b949e"
+  color: "ededed"
   description: "GitHub Actions, Dependabot, and installer build pipelines."
 - name: "area:tests"
-  color: "8b949e"
+  color: "ededed"
   description: "Unit, integration, and e2e test suites."
 - name: "area:docs"
-  color: "8b949e"
+  color: "ededed"
   description: "README, changelogs, and developer-facing docs."
 - name: "area:research"
-  color: "8b949e"
+  color: "ededed"
   description: "POCs, library evaluation, open-ended discovery."
 
 # ── Type ────────────────────────────────────────────────────────────────────────
@@ -120,10 +120,10 @@
 
 # ── Tracking ────────────────────────────────────────────────────────────────────
 - name: "roadmap"
-  color: "ededed"
+  color: "8b949e"
   description: "Planned roadmap work (tracked as an issue, not in-repo)."
 - name: "tech-debt"
-  color: "ededed"
+  color: "8b949e"
   description: "Deferred cleanup tracked as an issue."
 
 # ── Dependabot (auto-applied to dependency PRs) ─────────────────────────────────

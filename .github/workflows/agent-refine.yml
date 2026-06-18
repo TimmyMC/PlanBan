@@ -6,13 +6,14 @@ name: Agent · refine
 # `status:needs-decision` and stops. The needs-decision branch is the Constitution §1
 # human-in-the-loop gate: the pipeline cannot proceed past a question on its own.
 #
-# Primary trigger is the hook (issue opened); the reconciler re-dispatches this for
-# any issue left in status:unrefined. Nothing runs until the owner flips the
-# `AGENTS_ENABLED` repo variable to "true" and sets CLAUDE_CODE_OAUTH_TOKEN.
+# Triggered when `status:unrefined` is applied to an issue (issue-triage.yml adds
+# it on open); the reconciler also re-dispatches this for any lingering unrefined
+# issue. Nothing runs until the owner flips the `AGENTS_ENABLED` repo variable to
+# "true" and sets CLAUDE_CODE_OAUTH_TOKEN.
 
 on:
   issues:
-    types: [opened]
+    types: [labeled]
   workflow_dispatch:
     inputs:
       issue:
@@ -35,7 +36,10 @@ jobs:
   refine:
     name: Refine issue
     runs-on: ubuntu-latest
-    if: vars.AGENTS_ENABLED == 'true'
+    # On a label event, only react to status:unrefined being applied.
+    if: >
+      vars.AGENTS_ENABLED == 'true' &&
+      (github.event_name != 'issues' || github.event.label.name == 'status:unrefined')
     steps:
       - name: Resolve target issue
         id: pick

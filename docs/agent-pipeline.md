@@ -8,7 +8,7 @@ relaxes them (Constitution §1, §9).
 ## Flow
 
 ```
-issue opened ─►(hook) agent-refine (Sonnet)
+issue opened ─► issue-triage adds status:unrefined ─►(hook) agent-refine (Sonnet)
    ├─ clear      → complexity:<tier> + acceptance-criteria + status:ready
    └─ ambiguous  → questions + status:needs-decision ─► HUMAN answers ─► requeue
 status:ready ─►(hook) agent-implement (model = tier)  → claims status:in-progress
