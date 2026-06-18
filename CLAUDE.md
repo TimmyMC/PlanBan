@@ -51,9 +51,11 @@ directly. Branch off, open a PR, and it auto-merges once CI is green. CI gates:
 
 **Tiered agent pipeline (opt-in).** An issue can flow refine → implement → review → merge
 through escalating model tiers, each PR reviewed by a strictly higher tier, with humans at the
-clarification / gate-approval / `do-not-merge` decisions. It's off until the owner sets the
-secrets and flips the `AGENTS_ENABLED` repo variable. Gate changes are cleared by an **owner
-review**, never a label. See [`docs/agent-pipeline.md`](docs/agent-pipeline.md).
+decisions that matter: the refiner only ever proposes (`status:refined`) — a human applies
+`status:ready` to authorize implementation — plus clarification, gate-approval, and
+`do-not-merge`. It's off until the owner sets the secrets and flips the `AGENTS_ENABLED` repo
+variable. Gate changes are cleared by an **owner review**, never a label. See
+[`docs/agent-pipeline.md`](docs/agent-pipeline.md).
 
 **Quality gates worth knowing.** The toolchain is pinned in `rust-toolchain.toml` (bump it
 *and* the `dtolnay/rust-toolchain@<ver>` refs in `ci-complete.yml` together). `crates/core/tests/architecture.rs`
