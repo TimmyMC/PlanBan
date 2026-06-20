@@ -49,6 +49,12 @@ directly. Branch off, open a PR, and it auto-merges once CI is green. CI gates:
 [`docs/trunk-based-development.md`](docs/trunk-based-development.md) and the broader plan in
 [`docs/quality-roadmap.md`](docs/quality-roadmap.md).
 
+**Tiered agent pipeline (opt-in).** An issue can flow refine → implement → review → merge
+through escalating model tiers, each PR reviewed by a strictly higher tier, with humans at the
+clarification / gate-approval / `do-not-merge` decisions. It's off until the owner sets the
+secrets and flips the `AGENTS_ENABLED` repo variable. Gate changes are cleared by an **owner
+review**, never a label. See [`docs/agent-pipeline.md`](docs/agent-pipeline.md).
+
 **Quality gates worth knowing.** The toolchain is pinned in `rust-toolchain.toml` (bump it
 *and* the `dtolnay/rust-toolchain@<ver>` refs in `ci-complete.yml` together). `crates/core/tests/architecture.rs`
 is a fitness function that fails if `clabby-core` gains a UI/vendor/network dependency or

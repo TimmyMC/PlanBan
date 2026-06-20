@@ -1,0 +1,104 @@
+name: Agent · review
+
+# Stage 3: reviews an agent-authored PR with a model ONE TIER ABOVE the PR's
+# complexity (haiku→Sonnet, sonnet→Opus, opus→Opus + a human). The reviewer runs
+# under REVIEWER_TOKEN — a DIFFERENT identity from the implementer — so:
+#   * its APPROVE is a real second-party review (GitHub forbids self-approval), and
+#   * that approval can NEVER clear a gate change (gate-integrity only honors an
+#     owner login), so agents review ordinary PRs but never their own gate edits.
+#
+# On pass (non-opus): approve + mark the draft ready → automerge picks it up.
+# On issues: request changes (stays draft) for the implementer loop to address.
+# opus PRs: the reviewer posts findings but defers the merge decision to a human.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to review"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+concurrency:
+  group: agents-global
+  cancel-in-progress: false
+
+jobs:
+  review:
+    name: Review agent PR
+    runs-on: ubuntu-latest
+    if: >
+      vars.AGENTS_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       contains(join(github.event.pull_request.labels.*.name, ','), 'agent-authored'))
+    steps:
+      - name: Resolve reviewer tier
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.inputs.pr || github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          labels=$(gh pr view "$PR" --json labels --jq '[.labels[].name] | join(",")')
+          tier=$(printf '%s' "$labels" | tr ',' '\n' | grep '^complexity:' | head -1 || true)
+          case "$tier" in
+            complexity:haiku)  model="claude-sonnet-4-6"; human="false" ;;
+            complexity:sonnet) model="claude-opus-4-8";   human="false" ;;
+            complexity:opus)   model="claude-opus-4-8";   human="true"  ;;
+            *) echo "PR #$PR has no complexity tier — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          echo "pr=$PR"        >> "$GITHUB_OUTPUT"
+          echo "model=$model"  >> "$GITHUB_OUTPUT"
+          echo "human=$human"  >> "$GITHUB_OUTPUT"
+          echo "Reviewing #$PR ($tier → reviewer $model, human-required=$human)."
+
+      - name: Checkout repository
+        if: steps.pick.outputs.pr != ''
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Review with Claude (tier+1)
+        if: steps.pick.outputs.pr != ''
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Distinct reviewer identity (NOT the implementer) so the approval is a
+          # real second-party review and can't self-approve.
+          github_token: ${{ secrets.REVIEWER_TOKEN || secrets.GITHUB_TOKEN }}
+          additional_permissions: |
+            actions: read
+          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
+          plugins: "code-review@claude-code-plugins"
+          claude_args: '--model ${{ steps.pick.outputs.model }} --allowed-tools "Bash,Read,Grep,Glob"'
+          prompt: |
+            Review PR #${{ steps.pick.outputs.pr }} in ${{ github.repository }} as a
+            senior reviewer one tier above the author. Read the PR diff and the linked
+            issue's "Acceptance criteria" comment.
+
+            Judge: (a) does it meet the acceptance criteria, (b) is it correct, (c) does
+            it follow CLAUDE.md / docs/CONSTITUTION.md, (d) are tests adequate (not
+            coverage-gaming — assertions must be meaningful)? Run `/code-review` on the PR
+            for the detailed pass. Confirm CI is green via `gh pr checks ${{ steps.pick.outputs.pr }}`.
+
+            Then act with `gh`:
+            - If it does NOT pass: `gh pr review ${{ steps.pick.outputs.pr }} --request-changes`
+              with SPECIFIC inline findings, add the `review:changes-requested` label, and
+              leave the PR as a draft. Do not approve.
+            - If it passes AND human-required is "${{ steps.pick.outputs.human }}" == "false":
+              `gh pr review ${{ steps.pick.outputs.pr }} --approve` with a body that lists
+              what you checked (criteria, correctness, tests), add `review:passed`, and
+              `gh pr ready ${{ steps.pick.outputs.pr }}` so auto-merge can take it.
+            - If human-required is "true" (opus tier): do NOT approve or mark ready. Post your
+              assessment as a normal review/comment and add a note that a human must give the
+              final approval. The merge stays a human decision.
+
+            A bare approval is not acceptable — always state specifically what you verified.
