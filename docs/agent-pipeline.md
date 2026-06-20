@@ -45,7 +45,7 @@ to" is never a control.
 | Principal | May do | Its approvals/merges are bounded by |
 | --- | --- | --- |
 | **Owner** (human, browser, 2FA) | clear gate changes; final-approve opus PRs; merge anything | — must never be an agent's credential |
-| **Implementer** (default: local Claude Code authed as the **Zlyzart** bot; or the CI implementer when `CI_IMPLEMENT_ENABLED=true`) | branch, push, open draft PRs, comment, non-protected labels | *can* submit reviews (PR-write includes that), but its approval is **inert**: not an `OWNERS` login (can't clear a gate), not in `REVIEWER_LOGINS` (can't trigger auto-merge), and GitHub blocks self-approval. Cannot push to trunk or merge. |
+| **Implementer** (local Claude Code authed as the **Zlyzart** bot) | branch, push, open draft PRs, comment, non-protected labels | *can* submit reviews (PR-write includes that), but its approval is **inert**: not an `OWNERS` login (can't clear a gate), not in `REVIEWER_LOGINS` (can't trigger auto-merge), and GitHub blocks self-approval. Cannot push to trunk or merge. |
 | **Reviewer** (the installed Claude **GitHub App**) | submit reviews, approve → auto-merge *ordinary* PRs | cannot clear a gate change (not an `OWNERS` login) or approve its own work |
 | **CI `GITHUB_TOKEN`** | run checks, read | cannot approve PRs at all (GitHub blocks the Actions token), nor trigger further workflows |
 
@@ -112,7 +112,8 @@ least-privilege **Zlyzart** bot — driven by the `/implement-next` routine
 a local implementer is a credential on a real machine, so a prompt-injected run could reach the
 whole box. We accept that **only** because (a) the implementer identity is least-privilege
 (Zlyzart: Write, not `OWNERS`/CODEOWNERS — its approvals are inert, it can't merge or clear a
-gate), (b) the deterministic gates are unchanged, and (c) the **author allowlist** below means
+gate), (b) the deterministic gates are unchanged, and (c) only **repo collaborators'** issues are
+implemented (enforced by `ready-author-guard.yml`: collaborator-authored AND owner-promoted), so
 the issue body feeding the local agent is never attacker-authored. For unattended runs, run the
 local implementer in an **isolated environment** (container/VM/dedicated OS user), never your
 daily login — Zlyzart bounds the *GitHub* authority but not the *machine*.
@@ -126,30 +127,20 @@ daily login — Zlyzart bounds the *GitHub* authority but not the *machine*.
      + refine). *No `IMPLEMENTER_TOKEN`/`REVIEWER_TOKEN` needed in this mode* — the reviewer auths as
      the installed App (omit `github_token`), and the implementer is your local `gh`/git (Zlyzart).
 3. **Variables** (same screen → Variables):
-   - `REVIEWER_LOGINS` — the App's `<app-name>[bot]` login; auto-merge only honors an agent PR
-     approved by one of these (or an owner). Unset ⇒ agent PRs wait for a human.
-   - `IMPLEMENT_AUTHORS` — space-separated logins whose issues may be auto-implemented
-     (default `TimmyMC Zlyzart`). `ready-author-guard.yml` only lets an issue hold `status:ready`
-     when it is **authored by** one of these **and** was **promoted to ready by an `OWNERS` login**
-     (the human go-decision); otherwise it strips `status:ready` → `status:needs-decision`. The
-     owner-promoter check stops a hijacked bot (which is itself on the author allowlist) from
-     self-authoring + self-promoting an issue. The `/implement-next` routine also filters by author,
-     and re-queues failures to `status:deferred` (never `status:ready`) so the reconciler re-promotes.
+   - `REVIEWER_LOGINS` — the App's `<app-name>[bot]` login (e.g. `claude[bot]`); auto-merge only
+     honors an agent PR approved by one of these (or an owner). Unset ⇒ agent PRs wait for a human.
    - `AGENTS_ENABLED` — `true` turns review/refine/reconciler on. Leave unset/false to pause.
-   - `CI_IMPLEMENT_ENABLED` — leave **unset**. Set `true` only to fall back to CI implementation.
 4. **Owner allowlist** — the logins permitted to clear a gate change live in the `OWNERS` env of
    `ci-complete.yml` (gate-integrity) and `label-guard.yml`, default `TimmyMC`. Update if owners
    change.
 
-### CI implementer fallback (opt-in)
-
-To implement in CI instead, set `CI_IMPLEMENT_ENABLED=true` and create a **second** distinct
-GitHub App for the implementer (implementer ≠ reviewer). Wire `agent-implement.yml`'s
-`IMPLEMENTER_TOKEN` as an **App token minted at runtime** with `actions/create-github-app-token`
-(secrets `IMPLEMENTER_APP_ID` + `IMPLEMENTER_PRIVATE_KEY`) — a static PAT is unsupported (a
-non-collaborator PAT 403s `claude-code-action`'s actor precheck) and a static App token can't be
-pasted as a secret (it expires hourly). The same `actions/create-github-app-token` swap is how
-you'd give the reviewer its own keyed App instead of the installed one.
+The **author allowlist needs no config**: `ready-author-guard.yml` only lets an issue hold
+`status:ready` when it is **authored by a repo collaborator** (read from `author_association`,
+auto-maintained — manage it via Settings → Collaborators) **and** was **promoted to ready by an
+`OWNERS` login** (the human go-decision). Otherwise it strips `status:ready` → `status:needs-decision`.
+The owner-promoter check stops a hijacked bot (itself a collaborator) from self-authoring +
+self-promoting an issue. `/implement-next` likewise selects only collaborator-authored issues and
+re-queues failures to `status:deferred` (never `status:ready`) so the reconciler re-promotes.
 
 ## Labels
 

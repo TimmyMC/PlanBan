@@ -5,13 +5,14 @@ name: Ready author guard
 # reads the issue body/criteria — attacker-controllable text — so reaching ready is
 # guarded on BOTH ends:
 #
-#   (1) trusted AUTHOR  — the issue must be authored by an allowlisted login
-#       (repo var IMPLEMENT_AUTHORS, default the maintainers). Stops a third party
-#       getting auto-implemented by filing an issue and waiting for a stray label.
+#   (1) trusted AUTHOR  — the issue must be authored by a repo COLLABORATOR, read
+#       from github.event.issue.author_association (no API call, not spoofable,
+#       auto-maintained — no name list to keep in sync). Stops a third party getting
+#       auto-implemented by filing an issue and waiting for a stray label.
 #   (2) owner PROMOTER  — `status:ready` must be applied BY AN OWNER (the human
-#       go-decision). Stops a hijacked bot (e.g. an injected local Zlyzart session,
-#       which IS on the author allowlist) from self-authoring an issue and
-#       self-promoting it to ready. `status:ready` a non-owner forged can't trigger.
+#       go-decision). Stops a hijacked bot (an injected local Zlyzart session — itself
+#       a collaborator) from self-authoring an issue and self-promoting it to ready.
+#       `status:ready` a non-owner forged can't trigger.
 #
 # If either fails, `status:ready` is stripped and the issue goes to
 # `status:needs-decision`. A relabel by the reconciler's GITHUB_TOKEN does NOT fire
@@ -19,8 +20,8 @@ name: Ready author guard
 # unaffected; this only ever judges human/PAT-applied promotions.
 #
 # Always-on, independent of AGENTS_ENABLED. Belt-and-suspenders: the /implement-next
-# routine ALSO filters by author. Keep IMPLEMENT_AUTHORS / OWNERS in sync with the
-# routine and with ci-complete.yml + label-guard.yml.
+# routine ALSO restricts to collaborator-authored issues. Keep OWNERS in sync with
+# ci-complete.yml + label-guard.yml.
 
 on:
   issues:
@@ -43,31 +44,34 @@ jobs:
       GH_REPO: ${{ github.repository }}
       N: ${{ github.event.issue.number }}
       AUTHOR: ${{ github.event.issue.user.login }}
+      ASSOC: ${{ github.event.issue.author_association }}
       SENDER: ${{ github.event.sender.login }}
-      ALLOW: ${{ vars.IMPLEMENT_AUTHORS }}
       # Logins whose go-decision promotes an issue to implementation. Mirror the
       # OWNERS in ci-complete.yml / label-guard.yml.
       OWNERS: "TimmyMC"
     steps:
-      - name: Revoke status:ready unless trusted-authored AND owner-promoted
+      - name: Revoke status:ready unless a collaborator authored it AND an owner promoted it
         run: |
           set -euo pipefail
-          allow="${ALLOW:-TimmyMC Zlyzart}"
           lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }  # GitHub logins are case-insensitive
-          author_lc=$(lc "$AUTHOR"); sender_lc=$(lc "$SENDER")
+          sender_lc=$(lc "$SENDER")
 
+          # (1) Author must be a repo collaborator (or owner / org member). author_association
+          # is in the event payload — no API call, reflects the author's CURRENT access.
           author_ok=false
-          for a in $allow;  do [ "$(lc "$a")" = "$author_lc" ] && author_ok=true && break; done
+          case "$ASSOC" in OWNER|MEMBER|COLLABORATOR) author_ok=true ;; esac
+
+          # (2) status:ready must be applied by an OWNERS login (the human go-decision).
           owner_ok=false
           for o in $OWNERS; do [ "$(lc "$o")" = "$sender_lc" ] && owner_ok=true && break; done
 
           if $author_ok && $owner_ok; then
-            echo "#$N: author @$AUTHOR trusted and promoted by owner @$SENDER — leaving status:ready."
+            echo "#$N: collaborator @$AUTHOR ($ASSOC), promoted by owner @$SENDER — leaving status:ready."
             exit 0
           fi
 
           reason=""
-          $author_ok || reason="author @$AUTHOR is not in the implement allowlist (\`$allow\`)"
+          $author_ok || reason="author @$AUTHOR is not a repo collaborator (association: $ASSOC)"
           if ! $owner_ok; then
             [ -n "$reason" ] && reason="$reason; "
             reason="${reason}status:ready was applied by @$SENDER, not an owner (\`$OWNERS\`)"
@@ -83,5 +87,5 @@ jobs:
             gh issue comment "$N" --body "$MARKER
           🔒 Revoked \`status:ready\` — $reason.
 
-          Auto-implementation requires an issue **authored by** a trusted login (\`$allow\`) **and** promoted to \`status:ready\` **by an owner** (\`$OWNERS\`) — the human go-decision a compromised bot can't forge. Moved to \`status:needs-decision\`; an owner can re-apply \`status:ready\` to proceed. (See docs/agent-pipeline.md → *Local implementer mode*.)"
+          Auto-implementation requires an issue **authored by a repo collaborator** **and** promoted to \`status:ready\` **by an owner** (\`$OWNERS\`) — the human go-decision a compromised bot can't forge. Moved to \`status:needs-decision\`; an owner can re-apply \`status:ready\` to proceed. (See docs/agent-pipeline.md → *Local implementer mode*.)"
           fi
