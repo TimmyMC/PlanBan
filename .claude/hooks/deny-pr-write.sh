@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # PreToolUse guard (Bash + PowerShell tools): hard-deny approving or merging a PR
 # via the CLI, matching the dangerous call ANYWHERE in the command — so the
-# `bash -c '...'` wrappers, aliases, and `gh api .../merge` calls that the prefix
-# `permissions.deny` list can't see are still caught. Returns a deny decision with a
-# reason so a well-meaning agent understands why and stops.
+# `bash -c '...'` wrappers, aliases, and `gh api .../merge` calls are all caught,
+# not just a bare `gh pr merge`. This is the sole harness guard: it supersedes a
+# prefix-matched permissions.deny list (which couldn't see the wrapped/API forms),
+# so that list was removed. Returns a deny decision with a reason so a well-meaning
+# agent understands why and stops.
 #
 # Zero-trust note (docs/agent-pipeline.md): this is defense-in-depth, NOT the
 # boundary. An injected/adversarial agent isn't "dissuaded" — it will probe other

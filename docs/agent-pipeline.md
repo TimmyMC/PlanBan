@@ -73,7 +73,8 @@ rides on top of these gates and can never relax them.
    implementer ≠ reviewer (so a reviewer can't self-approve, which GitHub also blocks).
 3. **Interactive coding agents** (Claude Code/desktop, etc.) run authed as a least-privilege bot in
    an isolated environment — never the owner's `gh`/git login — so injection can't borrow owner
-   authority. Add a harness deny-list for `gh pr merge` / `gh pr review` as defense in depth.
+   authority. A harness guard (the `deny-pr-write.sh` PreToolUse hook) denies `gh pr merge` /
+   `gh pr review` — including wrapped/aliased/REST-API forms — as defense in depth.
 4. **Branch protection** backs the above at GitHub level: require CODEOWNERS review, require
    approval from someone other than the last pusher, and dismiss stale approvals.
 
