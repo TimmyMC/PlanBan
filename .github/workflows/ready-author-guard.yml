@@ -53,11 +53,13 @@ jobs:
         run: |
           set -euo pipefail
           allow="${ALLOW:-TimmyMC Zlyzart}"
+          lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }  # GitHub logins are case-insensitive
+          author_lc=$(lc "$AUTHOR"); sender_lc=$(lc "$SENDER")
 
           author_ok=false
-          for a in $allow; do [ "$a" = "$AUTHOR" ] && author_ok=true && break; done
+          for a in $allow;  do [ "$(lc "$a")" = "$author_lc" ] && author_ok=true && break; done
           owner_ok=false
-          for o in $OWNERS; do [ "$o" = "$SENDER" ] && owner_ok=true && break; done
+          for o in $OWNERS; do [ "$(lc "$o")" = "$sender_lc" ] && owner_ok=true && break; done
 
           if $author_ok && $owner_ok; then
             echo "#$N: author @$AUTHOR trusted and promoted by owner @$SENDER — leaving status:ready."
@@ -72,6 +74,14 @@ jobs:
           fi
           echo "::warning::#$N: revoking status:ready — $reason."
           gh issue edit "$N" --remove-label status:ready --add-label status:needs-decision
-          gh issue comment "$N" --body "🔒 Revoked \`status:ready\` — $reason.
+
+          # Comment once per issue (dedup on a marker, like label-guard.yml).
+          MARKER="<!-- ready-author-guard -->"
+          existing=$(gh api "repos/$GH_REPO/issues/$N/comments" \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" 2>/dev/null | head -1 || true)
+          if [ -z "$existing" ]; then
+            gh issue comment "$N" --body "$MARKER
+          🔒 Revoked \`status:ready\` — $reason.
 
           Auto-implementation requires an issue **authored by** a trusted login (\`$allow\`) **and** promoted to \`status:ready\` **by an owner** (\`$OWNERS\`) — the human go-decision a compromised bot can't forge. Moved to \`status:needs-decision\`; an owner can re-apply \`status:ready\` to proceed. (See docs/agent-pipeline.md → *Local implementer mode*.)"
+          fi
