@@ -29,13 +29,14 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
-# Cancel superseded runs on the same ref so stale CI can't race auto-merge and
-# we don't burn minutes on commits that have already been replaced. Keyed on the
-# PR number (stable across pull_request and pull_request_review events; falls back
-# to the ref for non-PR triggers).
+# Keyed on the PR number (stable across pull_request and pull_request_review; falls
+# back to the ref). Only a new *push* supersedes in-progress CI. An approval
+# (pull_request_review) must NOT cancel a running push — that would kill the expensive
+# jobs, which the review run itself skips, leaving them red. Instead the approval run
+# queues behind the push, then re-evaluates Gate integrity green.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Detect which areas of the codebase changed so downstream jobs can skip
