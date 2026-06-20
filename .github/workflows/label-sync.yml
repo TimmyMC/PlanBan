@@ -1,9 +1,10 @@
 name: Label sync
 
-# Keep the GitHub label set in step with the version-controlled taxonomy in
+# Make the GitHub label set exactly match the version-controlled taxonomy in
 # .github/labels.yml. Runs on push to trunk when that file changes, and on demand.
-# delete-other-labels is left OFF: labels.yml is the source of truth for the labels
-# the pipeline relies on, not an exhaustive list — unlisted labels are preserved.
+# delete-other-labels is ON: labels.yml is the EXHAUSTIVE single source of truth, so
+# any label not listed there is deleted from the repo. Add/rename/retire labels by
+# editing that file — never in the UI, or the next sync will revert it.
 
 on:
   push:
@@ -28,5 +29,5 @@ jobs:
       - uses: EndBug/label-sync@v2
         with:
           config-file: .github/labels.yml
-          delete-other-labels: false
+          delete-other-labels: true
           token: ${{ secrets.GITHUB_TOKEN }}
