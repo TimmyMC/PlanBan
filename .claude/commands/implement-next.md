@@ -73,6 +73,9 @@ gh issue comment <N> --body "🤖 Implementation started locally (Zlyzart)."
 
 ## 4. On failure / can't finish
 
-Release the claim so the issue isn't stuck: `gh issue edit <N> --remove-label
-status:in-progress --add-label status:ready` (or `status:needs-decision` if it's genuinely
-blocked on a human), and comment what happened.
+Release the claim so the issue isn't stuck — re-queue to **`status:deferred`**, NOT
+`status:ready`: `gh issue edit <N> --remove-label status:in-progress --add-label
+status:deferred` (use `status:needs-decision` instead if it's genuinely blocked on a human),
+and comment what happened. The reconciler re-promotes `status:deferred → status:ready` via
+`GITHUB_TOKEN`. **Never apply `status:ready` yourself** — only an owner promotes to ready
+(the `ready-author-guard` would revoke a bot-applied one anyway).

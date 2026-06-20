@@ -1,19 +1,26 @@
 name: Ready author guard
 
-# Defense-in-depth for the local-implementer model. The local implementer (Claude
-# Code on the maintainer's machine) reads an issue's body and acceptance criteria —
-# attacker-controllable text — so the implemented issue MUST come from a trusted
-# author. This guard enforces that at the label level: when `status:ready` is applied
-# to an issue NOT authored by an allowlisted login, it strips `status:ready` and moves
-# the issue to `status:needs-decision`, so an attacker can't get their issue
-# auto-implemented just by filing it and waiting for a stray ready label.
+# Defense-in-depth for the local-implementer model. `status:ready` is the trigger
+# the local implementer (Claude Code on the maintainer's machine) acts on, and it
+# reads the issue body/criteria — attacker-controllable text — so reaching ready is
+# guarded on BOTH ends:
 #
-# Allowlist: repo var IMPLEMENT_AUTHORS (space-separated logins). Defaults to the
-# maintainers if unset/empty (fail-safe). Always-on, independent of AGENTS_ENABLED —
-# the local routine implements from `status:ready` regardless of that flag.
+#   (1) trusted AUTHOR  — the issue must be authored by an allowlisted login
+#       (repo var IMPLEMENT_AUTHORS, default the maintainers). Stops a third party
+#       getting auto-implemented by filing an issue and waiting for a stray label.
+#   (2) owner PROMOTER  — `status:ready` must be applied BY AN OWNER (the human
+#       go-decision). Stops a hijacked bot (e.g. an injected local Zlyzart session,
+#       which IS on the author allowlist) from self-authoring an issue and
+#       self-promoting it to ready. `status:ready` a non-owner forged can't trigger.
 #
-# This is belt-and-suspenders: the local routine ALSO filters by author when it
-# selects work. Keep IMPLEMENT_AUTHORS and that routine's allowlist in sync.
+# If either fails, `status:ready` is stripped and the issue goes to
+# `status:needs-decision`. A relabel by the reconciler's GITHUB_TOKEN does NOT fire
+# this event (GitHub anti-recursion), so legitimate deferred→ready re-queues are
+# unaffected; this only ever judges human/PAT-applied promotions.
+#
+# Always-on, independent of AGENTS_ENABLED. Belt-and-suspenders: the /implement-next
+# routine ALSO filters by author. Keep IMPLEMENT_AUTHORS / OWNERS in sync with the
+# routine and with ci-complete.yml + label-guard.yml.
 
 on:
   issues:
@@ -28,7 +35,7 @@ concurrency:
 
 jobs:
   guard:
-    name: Enforce author allowlist on status:ready
+    name: Enforce trusted author + owner promotion on status:ready
     runs-on: ubuntu-latest
     if: github.event.label.name == 'status:ready'
     env:
@@ -36,20 +43,35 @@ jobs:
       GH_REPO: ${{ github.repository }}
       N: ${{ github.event.issue.number }}
       AUTHOR: ${{ github.event.issue.user.login }}
+      SENDER: ${{ github.event.sender.login }}
       ALLOW: ${{ vars.IMPLEMENT_AUTHORS }}
+      # Logins whose go-decision promotes an issue to implementation. Mirror the
+      # OWNERS in ci-complete.yml / label-guard.yml.
+      OWNERS: "TimmyMC"
     steps:
-      - name: Revoke status:ready from non-allowlisted authors
+      - name: Revoke status:ready unless trusted-authored AND owner-promoted
         run: |
           set -euo pipefail
           allow="${ALLOW:-TimmyMC Zlyzart}"
-          for a in $allow; do
-            if [ "$a" = "$AUTHOR" ]; then
-              echo "#$N author @$AUTHOR is allowlisted — leaving status:ready."
-              exit 0
-            fi
-          done
-          echo "::warning::#$N author @$AUTHOR is NOT in the implement allowlist ($allow) — revoking status:ready."
-          gh issue edit "$N" --remove-label status:ready --add-label status:needs-decision
-          gh issue comment "$N" --body "🔒 Auto-implementation is restricted to issues authored by: \`$allow\`.
 
-          This issue (by @$AUTHOR) was moved to \`status:needs-decision\` — a maintainer must implement it manually or re-file it under an allowlisted account. (Policy: the local implementer only runs trusted-authored issues; see docs/agent-pipeline.md → *Local implementer mode*.)"
+          author_ok=false
+          for a in $allow; do [ "$a" = "$AUTHOR" ] && author_ok=true && break; done
+          owner_ok=false
+          for o in $OWNERS; do [ "$o" = "$SENDER" ] && owner_ok=true && break; done
+
+          if $author_ok && $owner_ok; then
+            echo "#$N: author @$AUTHOR trusted and promoted by owner @$SENDER — leaving status:ready."
+            exit 0
+          fi
+
+          reason=""
+          $author_ok || reason="author @$AUTHOR is not in the implement allowlist (\`$allow\`)"
+          if ! $owner_ok; then
+            [ -n "$reason" ] && reason="$reason; "
+            reason="${reason}status:ready was applied by @$SENDER, not an owner (\`$OWNERS\`)"
+          fi
+          echo "::warning::#$N: revoking status:ready — $reason."
+          gh issue edit "$N" --remove-label status:ready --add-label status:needs-decision
+          gh issue comment "$N" --body "🔒 Revoked \`status:ready\` — $reason.
+
+          Auto-implementation requires an issue **authored by** a trusted login (\`$allow\`) **and** promoted to \`status:ready\` **by an owner** (\`$OWNERS\`) — the human go-decision a compromised bot can't forge. Moved to \`status:needs-decision\`; an owner can re-apply \`status:ready\` to proceed. (See docs/agent-pipeline.md → *Local implementer mode*.)"

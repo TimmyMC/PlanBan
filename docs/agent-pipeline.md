@@ -129,8 +129,12 @@ daily login — Zlyzart bounds the *GitHub* authority but not the *machine*.
    - `REVIEWER_LOGINS` — the App's `<app-name>[bot]` login; auto-merge only honors an agent PR
      approved by one of these (or an owner). Unset ⇒ agent PRs wait for a human.
    - `IMPLEMENT_AUTHORS` — space-separated logins whose issues may be auto-implemented
-     (default `TimmyMC Zlyzart`). Enforced by `ready-author-guard.yml` (strips `status:ready` from
-     anyone else → `status:needs-decision`) **and** by the `/implement-next` routine's selection.
+     (default `TimmyMC Zlyzart`). `ready-author-guard.yml` only lets an issue hold `status:ready`
+     when it is **authored by** one of these **and** was **promoted to ready by an `OWNERS` login**
+     (the human go-decision); otherwise it strips `status:ready` → `status:needs-decision`. The
+     owner-promoter check stops a hijacked bot (which is itself on the author allowlist) from
+     self-authoring + self-promoting an issue. The `/implement-next` routine also filters by author,
+     and re-queues failures to `status:deferred` (never `status:ready`) so the reconciler re-promotes.
    - `AGENTS_ENABLED` — `true` turns review/refine/reconciler on. Leave unset/false to pause.
    - `CI_IMPLEMENT_ENABLED` — leave **unset**. Set `true` only to fall back to CI implementation.
 4. **Owner allowlist** — the logins permitted to clear a gate change live in the `OWNERS` env of
