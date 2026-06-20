@@ -1,0 +1,106 @@
+# Version-controlled label taxonomy for the tiered agent pipeline.
+#
+# Synced to GitHub by .github/workflows/label-sync.yml (EndBug/label-sync) on
+# every push to trunk that touches this file. `delete-other-labels` is left OFF
+# there, so labels absent from this file are kept, not removed — this file is the
+# source of truth for the labels the pipeline *relies on*, not an exhaustive list.
+#
+# This file lives under /.github, so CODEOWNERS + gate-guard rule 6 mean only the
+# owner can change the label taxonomy an agent runs on.
+
+# ── Complexity → which model tier implements the issue ──────────────────────────
+- name: "complexity:haiku"
+  color: "0e8a16"
+  description: "Small, well-scoped — implemented by the Haiku tier"
+- name: "complexity:sonnet"
+  color: "fbca04"
+  description: "Moderate — implemented by the Sonnet tier"
+- name: "complexity:opus"
+  color: "d93f0b"
+  description: "Large or subtle — implemented by the Opus tier"
+
+# ── Priority (pipeline picks highest priority, then oldest) ─────────────────────
+- name: "priority:low"
+  color: "c2e0c6"
+  description: "Nice to have"
+- name: "priority:medium"
+  color: "bfd4f2"
+  description: "Normal priority"
+- name: "priority:high"
+  color: "f9d0c4"
+  description: "Important — pick before lower priorities"
+- name: "priority:critical"
+  color: "b60205"
+  description: "Drop everything"
+
+# ── Issue lifecycle status ──────────────────────────────────────────────────────
+- name: "status:unrefined"
+  color: "ededed"
+  description: "New issue, not yet refined into an actionable spec"
+- name: "status:ready"
+  color: "0e8a16"
+  description: "Refined with acceptance criteria + complexity — eligible to implement"
+- name: "status:needs-human"
+  color: "d93f0b"
+  description: "Refiner has open questions — blocked until a human answers (§1)"
+- name: "status:in-progress"
+  color: "1d76db"
+  description: "Claimed by an implementer agent (prevents double pickup)"
+- name: "status:deferred"
+  color: "fef2c0"
+  description: "Postponed (e.g. Claude usage limit) — the reconciler retries it"
+
+# ── Area ────────────────────────────────────────────────────────────────────────
+- name: "area:ci"
+  color: "5319e7"
+  description: "CI, workflows, automation"
+- name: "area:core"
+  color: "5319e7"
+  description: "clabby-core engine"
+- name: "area:cli"
+  color: "5319e7"
+  description: "clabby CLI driver"
+- name: "area:ui"
+  color: "5319e7"
+  description: "Tauri + React frontend"
+- name: "area:docs"
+  color: "5319e7"
+  description: "Documentation"
+
+# ── Type ────────────────────────────────────────────────────────────────────────
+- name: "type:feature"
+  color: "a2eeef"
+  description: "New capability"
+- name: "type:bug"
+  color: "ee0701"
+  description: "Something is broken"
+- name: "type:tech-debt"
+  color: "fbca04"
+  description: "Cleanup / maintainability"
+- name: "type:chore"
+  color: "fef2c0"
+  description: "Routine task (deps, config)"
+
+# ── Pipeline mechanics ──────────────────────────────────────────────────────────
+- name: "agent-authored"
+  color: "0052cc"
+  description: "PR opened by an implementer agent — routes tier+1 review + automerge"
+- name: "review:passed"
+  color: "0e8a16"
+  description: "Tier+1 reviewer approved (mirror of the GitHub review state)"
+- name: "review:changes-requested"
+  color: "d93f0b"
+  description: "Tier+1 reviewer requested changes"
+
+# ── Human-in-the-loop controls ──────────────────────────────────────────────────
+- name: "do-not-merge"
+  color: "b60205"
+  description: "Human hold — CI still runs, but auto-merge skips this PR (§1)"
+- name: "gate-change-approved"
+  color: "0e8a16"
+  description: "Legacy/no-op — gate changes are now cleared by an owner review, not this label"
+
+# ── Tracking ────────────────────────────────────────────────────────────────────
+- name: "roadmap"
+  color: "c5def5"
+  description: "Planned roadmap work"

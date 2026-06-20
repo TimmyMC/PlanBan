@@ -47,10 +47,17 @@ The auto-merge job starts only after **every** CI job passes:
 | `Coverage`          | `cargo llvm-cov --fail-under-lines 80`                     |
 | `Frontend`          | frontend `tsc`+`vite` build, Biome lint, Playwright e2e    |
 | `Desktop app`       | compiles the Tauri desktop shell + `clippy -D warnings`    |
+| `Secret scanning`   | gitleaks over the diff                                     |
+| `Gate integrity`    | no test/gate weakening (`scripts/gate-guard.sh`)           |
 
 The desktop shell lives outside the cargo workspace (WebView2 system deps), so the
 workspace `cargo test --workspace` deliberately doesn't touch it — the `Desktop app`
 job is what gates that crate so it can't silently stop compiling.
+
+If a PR deliberately changes the test/gate surface, `Gate integrity` stays red until an
+**owner approves the PR with a review** — an identity-bound signal (not a label an agent
+could self-apply). The approval re-runs CI and clears the gate; see the "Gate guard"
+section of [`CLAUDE.md`](../CLAUDE.md).
 
 The coverage bar is **80% line coverage**, measured across the workspace by
 `cargo-llvm-cov`. Measured coverage is ~82%; the 80% floor leaves a small buffer

@@ -61,9 +61,12 @@ deleting a test file, net-removing tests/assertions, adding `#[ignore]`/`.skip`/
 `continue-on-error`, lowering a coverage/strictness threshold, removing `-D warnings`/
 `--frozen-lockfile`, editing the gate machinery itself, or dropping a `docs/use-cases.md`
 row. The fix is to make the code pass, not to remove the check. A *deliberate* gate change
-is a human decision: the owner adds the `gate-change-approved` label, which re-runs CI and
-clears the guard (CODEOWNERS marks the same paths for optional required review). Run it
-locally before pushing: `scripts/gate-guard.sh origin/trunk`.
+is a human decision: an **owner approves the PR with a review** (Files changed → Approve),
+which re-runs CI and clears the guard. The signal is an identity-bound owner review, *not* a
+label — so an agent can't clear its own gate change by self-applying a label (the
+`label-guard` workflow strips a `gate-change-approved` label added by anyone but an owner).
+CODEOWNERS marks the same paths for required review. Run it locally before pushing:
+`scripts/gate-guard.sh origin/trunk`.
 
 **Skills & self-improvement.** Reusable, repo-specific know-how lives in `.claude/skills/`;
 a `SessionStart` hook lists them each session. When you solve something non-obvious that

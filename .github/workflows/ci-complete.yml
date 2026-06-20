@@ -15,6 +15,12 @@ name: CI complete
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
+  # An owner approving review is how a deliberate gate change is cleared (see the
+  # gate-integrity job). Re-running on review submission lets that approval reach
+  # the guard and flow into auto-merge — the same role the `labeled` event plays
+  # for the (now legacy) label, but keyed on an unforgeable, identity-bound signal.
+  pull_request_review:
+    types: [submitted, dismissed]
 
 # Restrict GITHUB_TOKEN to read-only by default; override per-job when more is needed.
 permissions:
@@ -24,9 +30,11 @@ env:
   CARGO_TERM_COLOR: always
 
 # Cancel superseded runs on the same ref so stale CI can't race auto-merge and
-# we don't burn minutes on commits that have already been replaced.
+# we don't burn minutes on commits that have already been replaced. Keyed on the
+# PR number (stable across pull_request and pull_request_review events; falls back
+# to the ref for non-PR triggers).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -45,7 +53,13 @@ jobs:
       any_code: ${{ steps.filter.outputs.any_code }}
     steps:
       - uses: actions/checkout@v6
+      # paths-filter resolves changed paths from PR context; it only applies on
+      # pull_request events. On pull_request_review the step is skipped and the
+      # outputs are empty (falsey) — every expensive job then skips (each also
+      # requires event_name == 'pull_request'), while gate-integrity still runs
+      # via its pull_request_review clause. The job itself still succeeds.
       - uses: dorny/paths-filter@v3
+        if: github.event_name == 'pull_request'
         id: filter
         with:
           # Filters live in .github/filters.yml (DRY'd with YAML anchors; see the
@@ -55,32 +69,66 @@ jobs:
   # Stops an agent from making CI green by deleting a test or loosening a gate
   # instead of fixing the code. Rides the CI-success rail: if this fails, the
   # whole run fails and auto-merge (gated on CI success) never fires. A deliberate
-  # gate change is approved by the owner adding the `gate-change-approved` label.
-  # Also fires unconditionally on label events so the label re-run always reaches
-  # the guard even when no new code was pushed.
+  # gate change is cleared *only* by an approving PR review from an owner-allowlisted
+  # login (computed in the "owner gate approval" step) — never by a label an agent
+  # could apply to its own PR. Also fires on label and review events so the approval
+  # always reaches the guard even when no new code was pushed.
   gate-integrity:
     name: Gate integrity
     needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # PR comments go through the issues-comments endpoint, but for a PR that
-      # endpoint is governed by pull-requests (not issues) write — without it the
-      # "apply gate-change-approved" comment POST 403s.
+      # Reading PR reviews + posting the unblock comment go through endpoints
+      # governed by pull-requests write for a PR.
       pull-requests: write
-    if: needs.changes.outputs.any_code == 'true' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
+    if: needs.changes.outputs.any_code == 'true' || github.event.action == 'labeled' || github.event.action == 'unlabeled' || github.event_name == 'pull_request_review'
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
+      # The ONLY signal that clears a gate change: an APPROVED review whose author
+      # is in the owner allowlist. Reviews are identity-bound — an agent cannot
+      # submit one as the owner — so unlike the old `gate-change-approved` label
+      # this can't be self-applied by the PR's author. We take each allowlisted
+      # login's *latest* non-comment review state, so a later CHANGES_REQUESTED or
+      # DISMISSED revokes a prior approval.
+      - name: Owner gate approval
+        id: approval
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          # Space-separated logins whose approving review clears a gate change.
+          OWNERS: "TimmyMC"
+        run: |
+          approved=false
+          if [ -n "$PR" ]; then
+            declare -A last
+            while IFS=$'\t' read -r login state; do
+              case "$state" in
+                APPROVED|CHANGES_REQUESTED|DISMISSED) last["$login"]="$state" ;;
+              esac
+            done < <(gh api --paginate "repos/$REPO/pulls/$PR/reviews" \
+                       --jq '.[] | [.user.login, .state] | @tsv')
+            for o in $OWNERS; do
+              [ "${last[$o]:-}" = "APPROVED" ] && approved=true
+            done
+          fi
+          echo "approved=$approved" >> "$GITHUB_OUTPUT"
+          echo "Owner gate approval: $approved"
+
       - name: Guard against weakened tests/gates
         id: guard
         shell: bash
         env:
-          BASE_REF: ${{ github.base_ref }}
-          GATE_CHANGE_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'gate-change-approved') }}
+          # Use the payload path (not github.base_ref, which is empty on
+          # pull_request_review events) so the base fetch works when an owner approves.
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GATE_CHANGE_APPROVED: ${{ steps.approval.outputs.approved }}
         run: |
           git fetch --no-tags origin "$BASE_REF"
           set +e
@@ -132,7 +180,7 @@ jobs:
           if [ -n "$links" ]; then
             lines+=("**Jump to the diff of the flagged files:**" "" "$links")
           fi
-          lines+=("**To unblock:** apply the \`gate-change-approved\` label — CI will re-run and this check will clear." ""
+          lines+=("**To unblock:** an owner must **approve this PR with a review** (Files changed → Review changes → Approve). CI re-runs on the approval and this check clears. A label can no longer clear it — only an identity-bound owner review can, so an agent can't self-approve its own gate change." ""
             "If the change was unintentional (test removed, threshold lowered), restore the original gate instead.")
           body=$(printf '%s\n' "${lines[@]}")
           jq -n --arg body "$body" '{body: $body}' \
@@ -141,6 +189,8 @@ jobs:
   secret-scan:
     name: Secret scanning
     runs-on: ubuntu-latest
+    # Code scan — only on actual PR code events, not label/review toggles.
+    if: github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     permissions:
       contents: read
       pull-requests: read
@@ -160,7 +210,7 @@ jobs:
     # Windows matches the dev environment and the cfg(windows) cmd-quoting path.
     # (Adding an ubuntu leg to exercise the sh path is tracked in BACKLOG.md.)
     runs-on: windows-latest
-    if: needs.changes.outputs.rust == 'true' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    if: needs.changes.outputs.rust == 'true' && github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
       - uses: actions/checkout@v6
 
@@ -203,7 +253,7 @@ jobs:
     name: Coverage
     needs: changes
     runs-on: windows-latest
-    if: needs.changes.outputs.rust == 'true' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    if: needs.changes.outputs.rust == 'true' && github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
       - uses: actions/checkout@v6
 
@@ -259,7 +309,7 @@ jobs:
     name: Frontend
     needs: changes
     runs-on: windows-latest
-    if: needs.changes.outputs.frontend == 'true' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    if: needs.changes.outputs.frontend == 'true' && github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     defaults:
       run:
         working-directory: ui
@@ -335,7 +385,7 @@ jobs:
     # deps), so the workspace lint/test/coverage jobs never touch it. This job
     # is what actually gates the desktop shell: it must compile + pass clippy.
     runs-on: windows-latest
-    if: needs.changes.outputs.desktop == 'true' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    if: needs.changes.outputs.desktop == 'true' && github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
       - uses: actions/checkout@v6
 
