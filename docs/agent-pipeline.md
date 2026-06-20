@@ -9,7 +9,8 @@ relaxes them (Constitution §1, §9).
 
 ```
 issue opened ─► issue-triage adds status:unrefined ─►(hook) agent-refine (Sonnet)
-   ├─ clear      → complexity:<tier> + acceptance-criteria + status:ready
+   ├─ clear      → proposed complexity:<tier> + acceptance-criteria + status:refined
+   │                 └─► HUMAN reviews, applies status:ready (the go decision)
    └─ ambiguous  → questions + status:needs-decision ─► HUMAN answers ─► requeue
 status:ready ─►(hook) agent-implement (model = tier)  → claims status:in-progress
    └─ draft PR (agent-authored, complexity:<tier>) → CI runs
@@ -64,8 +65,10 @@ The pipeline is **inert until enabled** — merging it changes nothing until you
 
 ## Labels
 
-Lifecycle: `status:unrefined → status:ready → status:in-progress → (PR) → merged`, with
-`status:needs-decision` (blocked on a human) and `status:deferred` (retry) as off-ramps. Routing:
+Lifecycle: `status:unrefined → status:refined → (human) status:ready → status:in-progress →
+(PR) → merged`, with `status:needs-decision` (blocked on a human) and `status:deferred` (retry)
+as off-ramps. The refiner only ever reaches `status:refined`; a human applies `status:ready`,
+which is the gate between refinement and implementation. Routing:
 `complexity:{haiku,sonnet,opus}`, `agent-authored`, `review:{passed,changes-requested}`. Holds:
 `do-not-merge` (human stop). The taxonomy is version-controlled in `.github/labels.yml` and synced
 by `label-sync.yml`.
@@ -83,6 +86,7 @@ by `label-sync.yml`.
 ## Rolling out
 
 Enable in stages, watching the `agents-global` runs: flip `AGENTS_ENABLED` after the secrets/vars
-are set; soak on `complexity:haiku` issues first (refine a couple, let them flow), then let sonnet
-and opus issues through. Each agent workflow also has a `workflow_dispatch` for manual, targeted
+are set; soak on `complexity:haiku` issues first (let a couple refine to `status:refined`, then
+*you* apply `status:ready` to send them through), then let sonnet and opus issues through. Each
+agent workflow also has a `workflow_dispatch` for manual, targeted
 runs while you build confidence.

@@ -98,7 +98,7 @@ jobs:
           merged=$(gh pr list --state merged --label agent-authored --search "merged:>=$since" \
                      --json number,title --jq '[.[] | "- #\(.number) \(.title)"] | join("\n")' || true)
           counts=""
-          for s in unrefined ready in-progress needs-decision deferred; do
+          for s in unrefined refined ready in-progress needs-decision deferred; do
             c=$(gh issue list --state open --label "status:$s" --json number --jq 'length' || echo 0)
             counts="${counts}- status:${s}: ${c}\n"
           done
