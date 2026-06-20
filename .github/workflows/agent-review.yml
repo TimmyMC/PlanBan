@@ -2,7 +2,8 @@ name: Agent · review
 
 # Stage 3: reviews an agent-authored PR with a model ONE TIER ABOVE the PR's
 # complexity (haiku→Sonnet, sonnet→Opus, opus→Opus + a human). The reviewer runs
-# under REVIEWER_TOKEN — a DIFFERENT identity from the implementer — so:
+# as the installed Claude GitHub App — a DIFFERENT identity from the local
+# implementer (Claude Code authed as the Zlyzart bot) — so:
 #   * its APPROVE is a real second-party review (GitHub forbids self-approval), and
 #   * that approval can NEVER clear a gate change (gate-integrity only honors an
 #     owner login), so agents review ordinary PRs but never their own gate edits.
@@ -91,9 +92,16 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Distinct reviewer identity (NOT the implementer) so the approval is a
-          # real second-party review and can't self-approve.
-          github_token: ${{ secrets.REVIEWER_TOKEN || secrets.GITHUB_TOKEN }}
+          # No github_token on purpose: with it omitted, the action authenticates as
+          # the installed Claude GitHub App (the reviewer identity) — distinct from the
+          # local implementer (Zlyzart), so its APPROVE is a real second-party review
+          # and can't self-approve. Requirements for this to work:
+          #   * the App must have Pull requests: Read & Write (so it can approve), and
+          #   * its `<app-name>[bot]` login must be in the REVIEWER_LOGINS repo var, or
+          #     auto-merge won't honor the approval.
+          # Per claude-code-action docs, only set github_token when wiring your OWN
+          # custom app instead of the installed one. (Was: secrets.REVIEWER_TOKEN, a
+          # PAT — unsupported now; the App is the supported reviewer auth.)
           additional_permissions: |
             actions: read
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"

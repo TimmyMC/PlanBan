@@ -4,7 +4,7 @@ name: Agent · reconciler
 # limits and dropped events. Runs a few times a day, spends no model tokens itself,
 # and only does cheap bookkeeping:
 #   * status:deferred → status:ready   (re-queues a run that hit the usage limit;
-#                                        the labeled hook re-fires agent-implement)
+#                                        the local implementer routine polls ready)
 #   * stale status:in-progress with no PR → re-queued (a run that died mid-flight)
 #   * nudges the oldest status:unrefined issue + the oldest un-reviewed agent PR
 #   * weekly: opens a quality digest issue so the human keeps Overview (§3)
@@ -45,8 +45,9 @@ jobs:
           for n in $(gh issue list --state open --label status:deferred --json number --jq '.[].number'); do
             echo "Re-queueing deferred #$n"
             gh issue edit "$n" --remove-label status:deferred --add-label status:ready || true
-            # A GITHUB_TOKEN relabel does NOT fire agent-implement's hook, so dispatch it.
-            gh workflow run agent-implement.yml -f issue="$n" || true
+            # Implementation is local now (agent-implement is off by default): just
+            # restore status:ready; the local implementer routine picks it up on its
+            # next pass. If you re-enable CI implement, dispatch it here again.
           done
 
       - name: Reclaim stale in-progress claims
@@ -65,8 +66,8 @@ jobs:
             if [ "$age" -ge "$STALE_HOURS" ]; then
               echo "Reclaiming stale #$n (in-progress ${age}h, no PR)"
               gh issue edit "$n" --remove-label status:in-progress --add-label status:ready || true
-              # GITHUB_TOKEN relabel won't fire the hook — dispatch implement directly.
-              gh workflow run agent-implement.yml -f issue="$n" || true
+              # Local implementer routine picks up status:ready on its next pass
+              # (CI implement is off by default).
             fi
           done
 

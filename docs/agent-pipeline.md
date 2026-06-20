@@ -12,9 +12,9 @@ issue opened ─► issue-triage adds status:unrefined ─►(hook) agent-refine
    ├─ clear      → proposed complexity:<tier> + acceptance-criteria + status:refined
    │                 └─► HUMAN reviews, applies status:ready (the go decision)
    └─ ambiguous  → questions + status:needs-decision ─► HUMAN answers ─► requeue
-status:ready ─►(hook) agent-implement (model = tier)  → claims status:in-progress
-   └─ draft PR (agent-authored, complexity:<tier>) → CI runs
-PR ─►(hook) agent-review (reviewer = tier+1)
+status:ready ─►(local) /implement-next picks a TRUSTED-authored ready issue → claims status:in-progress
+   └─ draft PR (agent-authored, complexity:<tier>) opened as Zlyzart → CI runs
+PR ─►(hook) agent-review (installed App, reviewer = tier+1)
    ├─ pass (haiku/sonnet) → approve + mark ready → auto-merge
    ├─ issues              → request changes (stays draft) → implementer loop
    └─ opus PR             → reviewer comments; a HUMAN gives the final approval
@@ -45,8 +45,8 @@ to" is never a control.
 | Principal | May do | Its approvals/merges are bounded by |
 | --- | --- | --- |
 | **Owner** (human, browser, 2FA) | clear gate changes; final-approve opus PRs; merge anything | — must never be an agent's credential |
-| **Implementer bot** | branch, push, open draft PRs, comment, non-protected labels | *can* submit reviews (PR-write includes that), but its approval is **inert**: not an `OWNERS` login (can't clear a gate), not in `REVIEWER_LOGINS` (can't trigger auto-merge), and GitHub blocks self-approval. Cannot push to trunk or merge. |
-| **Reviewer bot** | submit reviews, approve → auto-merge *ordinary* PRs | cannot clear a gate change (not an `OWNERS` login) or approve its own work |
+| **Implementer** (default: local Claude Code authed as the **Zlyzart** bot; or the CI implementer when `CI_IMPLEMENT_ENABLED=true`) | branch, push, open draft PRs, comment, non-protected labels | *can* submit reviews (PR-write includes that), but its approval is **inert**: not an `OWNERS` login (can't clear a gate), not in `REVIEWER_LOGINS` (can't trigger auto-merge), and GitHub blocks self-approval. Cannot push to trunk or merge. |
+| **Reviewer** (the installed Claude **GitHub App**) | submit reviews, approve → auto-merge *ordinary* PRs | cannot clear a gate change (not an `OWNERS` login) or approve its own work |
 | **CI `GITHUB_TOKEN`** | run checks, read | cannot approve PRs at all (GitHub blocks the Actions token), nor trigger further workflows |
 
 > **There is no GitHub permission for "open a PR but never approve."** Reviews live under the same
@@ -55,8 +55,8 @@ to" is never a control.
 > `REVIEWER_LOGINS` for merge) plus GitHub's self-approval block — **never** by assuming the token
 > lacks the verb. Two corollaries: (a) require branch-protection approvals from **CODEOWNERS / a
 > specific reviewer**, not "any 1 review," so a stray bot approval can't satisfy the merge rule; and
-> (b) the reviewer must be a real bot PAT/App token, because the Actions `GITHUB_TOKEN` is forbidden
-> from approving at all.
+> (b) the reviewer must be a real bot identity — a **GitHub App** (PATs are unsupported here) —
+> because the Actions `GITHUB_TOKEN` is forbidden from approving at all.
 
 **The injection-resistant floor.** The deterministic gates do not trust agent intent: a hijacked
 agent still cannot make a failing test pass, cannot strip `-D warnings`/a coverage floor without
@@ -97,24 +97,55 @@ quality digest. After `ATTEMPT_CAP` (3) failures an issue goes to `status:needs-
 
 ## Setup (owner, one-time)
 
-The pipeline is **inert until enabled** — merging it changes nothing until you:
+The pipeline is **inert until enabled** — merging it changes nothing until you set the secrets
+and variables. This repo runs the **local implementer mode** (below) by default; the all-CI
+two-bot setup is the opt-in fallback.
 
-1. **Identities** — create two GitHub identities distinct from your own (GitHub App
-   installations or bot accounts), one implementer and one reviewer. They must be different so
-   the reviewer's approval is a real second-party review (GitHub blocks self-approval) and so an
-   agent approval can be told apart from the owner's.
+### Local implementer mode (default)
+
+Implementation runs **locally** — Claude Code on the maintainer's machine, authed as the
+least-privilege **Zlyzart** bot — driven by the `/implement-next` routine
+(`.claude/commands/implement-next.md`). Only **review** runs in CI, as the installed Claude
+**GitHub App**. Two distinct identities (Zlyzart ≠ the App) keep the second-party-review invariant.
+
+*Why this shape:* a CI implementer is an ephemeral, repo-scoped token in a throwaway runner;
+a local implementer is a credential on a real machine, so a prompt-injected run could reach the
+whole box. We accept that **only** because (a) the implementer identity is least-privilege
+(Zlyzart: Write, not `OWNERS`/CODEOWNERS — its approvals are inert, it can't merge or clear a
+gate), (b) the deterministic gates are unchanged, and (c) the **author allowlist** below means
+the issue body feeding the local agent is never attacker-authored. For unattended runs, run the
+local implementer in an **isolated environment** (container/VM/dedicated OS user), never your
+daily login — Zlyzart bounds the *GitHub* authority but not the *machine*.
+
+1. **Identities** — install the Claude **GitHub App** on the repo (e.g. via `/install-github-app`)
+   with **Pull requests: Read & Write** so it can approve. Run interactive/local Claude Code authed
+   as **Zlyzart**, never the owner. The two must differ (the App ≠ Zlyzart) so the App's approval is
+   a genuine second-party review.
 2. **Secrets** (Settings → Secrets and variables → Actions → Secrets):
-   - `CLAUDE_CODE_OAUTH_TOKEN` — Claude subscription token for `claude-code-action`.
-   - `IMPLEMENTER_TOKEN` — PAT/App token for the implementer identity. **Must not be the default
-     `GITHUB_TOKEN`** — a PR opened with `GITHUB_TOKEN` does not trigger CI.
-   - `REVIEWER_TOKEN` — PAT/App token for the reviewer identity.
+   - `CLAUDE_CODE_OAUTH_TOKEN` — Claude subscription token for `claude-code-action` (used by review
+     + refine). *No `IMPLEMENTER_TOKEN`/`REVIEWER_TOKEN` needed in this mode* — the reviewer auths as
+     the installed App (omit `github_token`), and the implementer is your local `gh`/git (Zlyzart).
 3. **Variables** (same screen → Variables):
-   - `REVIEWER_LOGINS` — space-separated login(s) of the reviewer identity; auto-merge only
-     accepts an agent PR approved by one of these (or an owner). Unset ⇒ agent PRs wait for a human.
-   - `AGENTS_ENABLED` — set to `true` to turn the pipeline on. Leave unset/false to pause it.
+   - `REVIEWER_LOGINS` — the App's `<app-name>[bot]` login; auto-merge only honors an agent PR
+     approved by one of these (or an owner). Unset ⇒ agent PRs wait for a human.
+   - `IMPLEMENT_AUTHORS` — space-separated logins whose issues may be auto-implemented
+     (default `TimmyMC Zlyzart`). Enforced by `ready-author-guard.yml` (strips `status:ready` from
+     anyone else → `status:needs-decision`) **and** by the `/implement-next` routine's selection.
+   - `AGENTS_ENABLED` — `true` turns review/refine/reconciler on. Leave unset/false to pause.
+   - `CI_IMPLEMENT_ENABLED` — leave **unset**. Set `true` only to fall back to CI implementation.
 4. **Owner allowlist** — the logins permitted to clear a gate change live in the `OWNERS` env of
    `ci-complete.yml` (gate-integrity) and `label-guard.yml`, default `TimmyMC`. Update if owners
    change.
+
+### CI implementer fallback (opt-in)
+
+To implement in CI instead, set `CI_IMPLEMENT_ENABLED=true` and create a **second** distinct
+GitHub App for the implementer (implementer ≠ reviewer). Wire `agent-implement.yml`'s
+`IMPLEMENTER_TOKEN` as an **App token minted at runtime** with `actions/create-github-app-token`
+(secrets `IMPLEMENTER_APP_ID` + `IMPLEMENTER_PRIVATE_KEY`) — a static PAT is unsupported (a
+non-collaborator PAT 403s `claude-code-action`'s actor precheck) and a static App token can't be
+pasted as a secret (it expires hourly). The same `actions/create-github-app-token` swap is how
+you'd give the reviewer its own keyed App instead of the installed one.
 
 ## Labels
 

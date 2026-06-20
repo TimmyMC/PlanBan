@@ -1,20 +1,23 @@
 name: Agent · implement
 
-# Stage 2: picks a refined issue and implements it. The tier (model) is derived
-# from the issue's complexity:<tier> label, so haiku/sonnet/opus are all
-# first-class — but we run ONE issue per invocation (not a parallel tier matrix),
-# which together with the repo-wide `agents-global` concurrency keeps us to a
-# single model session at a time and inside the Claude usage limit.
+# Stage 2 (CI implementation) — OFF BY DEFAULT.
 #
-# Selection order: highest priority, then oldest. Claims the issue with
-# status:in-progress so it can't be double-picked. On ANY failure (usage limit or
-# transient) the claim is released and the issue is re-queued — never left stuck —
-# and the workflow still exits green. The reconciler retries status:deferred and
-# reclaims stale claims. After ATTEMPT_CAP failures an issue goes to needs-decision.
+# This repo implements LOCALLY: Claude Code on the maintainer's machine, authed as
+# the least-privilege Zlyzart bot, driven by the `implement-next` routine
+# (.claude/commands/implement-next.md). That keeps a prompt-injectable implementer's
+# blast radius off a CI runner's credentials, and pairs with ready-author-guard.yml
+# so only trusted-authored issues are ever implemented. This CI workflow is kept as
+# an opt-in fallback only.
 #
-# Requires repo var AGENTS_ENABLED == 'true', secret CLAUDE_CODE_OAUTH_TOKEN, and
-# secret IMPLEMENTER_TOKEN (a PAT/App token — a PR opened with the default
-# GITHUB_TOKEN would NOT trigger CI, same reason auto-update-prs needs a PAT).
+# To re-enable CI implementation: set repo var CI_IMPLEMENT_ENABLED=true AND wire
+# IMPLEMENTER_TOKEN as a GitHub App token minted at runtime with
+# actions/create-github-app-token (a static PAT is unsupported — claude-code-action's
+# actor precheck 403s a non-collaborator PAT, and an App installation token can't be
+# pasted as a static secret because it expires hourly).
+#
+# When enabled, behavior is unchanged: tier (model) derives from complexity:<tier>;
+# one issue per invocation under the repo-wide `agents-global` concurrency; claims
+# with status:in-progress; releases/re-queues on failure; ATTEMPT_CAP → needs-decision.
 
 on:
   issues:
@@ -42,9 +45,11 @@ jobs:
   implement:
     name: Implement issue
     runs-on: ubuntu-latest
-    # On a label event, only react to status:ready being added.
+    # OFF unless CI_IMPLEMENT_ENABLED is explicitly set (this repo implements
+    # locally — see the header). On a label event, only react to status:ready.
     if: >
       vars.AGENTS_ENABLED == 'true' &&
+      vars.CI_IMPLEMENT_ENABLED == 'true' &&
       (github.event_name != 'issues' || github.event.label.name == 'status:ready')
     steps:
       - name: Select & claim issue
@@ -111,7 +116,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # PAT/App token so the resulting PR triggers CI (GITHUB_TOKEN would not).
+          # Only reached when CI_IMPLEMENT_ENABLED=true. IMPLEMENTER_TOKEN must be a
+          # GitHub App token minted at runtime (see header) so the PR triggers CI;
+          # a static PAT is unsupported.
           github_token: ${{ secrets.IMPLEMENTER_TOKEN || secrets.GITHUB_TOKEN }}
           additional_permissions: |
             actions: read

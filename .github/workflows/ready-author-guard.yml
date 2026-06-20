@@ -1,0 +1,55 @@
+name: Ready author guard
+
+# Defense-in-depth for the local-implementer model. The local implementer (Claude
+# Code on the maintainer's machine) reads an issue's body and acceptance criteria —
+# attacker-controllable text — so the implemented issue MUST come from a trusted
+# author. This guard enforces that at the label level: when `status:ready` is applied
+# to an issue NOT authored by an allowlisted login, it strips `status:ready` and moves
+# the issue to `status:needs-decision`, so an attacker can't get their issue
+# auto-implemented just by filing it and waiting for a stray ready label.
+#
+# Allowlist: repo var IMPLEMENT_AUTHORS (space-separated logins). Defaults to the
+# maintainers if unset/empty (fail-safe). Always-on, independent of AGENTS_ENABLED —
+# the local routine implements from `status:ready` regardless of that flag.
+#
+# This is belt-and-suspenders: the local routine ALSO filters by author when it
+# selects work. Keep IMPLEMENT_AUTHORS and that routine's allowlist in sync.
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: ready-author-guard-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Enforce author allowlist on status:ready
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'status:ready'
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      N: ${{ github.event.issue.number }}
+      AUTHOR: ${{ github.event.issue.user.login }}
+      ALLOW: ${{ vars.IMPLEMENT_AUTHORS }}
+    steps:
+      - name: Revoke status:ready from non-allowlisted authors
+        run: |
+          set -euo pipefail
+          allow="${ALLOW:-TimmyMC Zlyzart}"
+          for a in $allow; do
+            if [ "$a" = "$AUTHOR" ]; then
+              echo "#$N author @$AUTHOR is allowlisted — leaving status:ready."
+              exit 0
+            fi
+          done
+          echo "::warning::#$N author @$AUTHOR is NOT in the implement allowlist ($allow) — revoking status:ready."
+          gh issue edit "$N" --remove-label status:ready --add-label status:needs-decision
+          gh issue comment "$N" --body "🔒 Auto-implementation is restricted to issues authored by: \`$allow\`.
+
+          This issue (by @$AUTHOR) was moved to \`status:needs-decision\` — a maintainer must implement it manually or re-file it under an allowlisted account. (Policy: the local implementer only runs trusted-authored issues; see docs/agent-pipeline.md → *Local implementer mode*.)"
