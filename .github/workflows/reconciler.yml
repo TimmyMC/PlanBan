@@ -45,6 +45,8 @@ jobs:
           for n in $(gh issue list --state open --label status:deferred --json number --jq '.[].number'); do
             echo "Re-queueing deferred #$n"
             gh issue edit "$n" --remove-label status:deferred --add-label status:ready || true
+            # A GITHUB_TOKEN relabel does NOT fire agent-implement's hook, so dispatch it.
+            gh workflow run agent-implement.yml -f issue="$n" || true
           done
 
       - name: Reclaim stale in-progress claims
@@ -63,6 +65,8 @@ jobs:
             if [ "$age" -ge "$STALE_HOURS" ]; then
               echo "Reclaiming stale #$n (in-progress ${age}h, no PR)"
               gh issue edit "$n" --remove-label status:in-progress --add-label status:ready || true
+              # GITHUB_TOKEN relabel won't fire the hook — dispatch implement directly.
+              gh workflow run agent-implement.yml -f issue="$n" || true
             fi
           done
 
