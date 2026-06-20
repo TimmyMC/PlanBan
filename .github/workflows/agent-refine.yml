@@ -3,7 +3,7 @@ name: Agent · refine
 # Stage 1 of the tiered agent pipeline. Turns a raw `status:unrefined` issue into an
 # actionable spec: acceptance criteria + a `complexity:<tier>` estimate, then
 # `status:ready` — OR, when the issue is ambiguous, posts clarifying questions and
-# `status:needs-human` and stops. The needs-human branch is the Constitution §1
+# `status:needs-decision` and stops. The needs-decision branch is the Constitution §1
 # human-in-the-loop gate: the pipeline cannot proceed past a question on its own.
 #
 # Primary trigger is the hook (issue opened); the reconciler re-dispatches this for
@@ -57,7 +57,7 @@ jobs:
           # Only refine issues that are unrefined or have no status yet.
           labels=$(gh issue view "$n" --json labels --jq '[.labels[].name] | join(",")')
           case ",$labels," in
-            *",status:ready,"*|*",status:in-progress,"*|*",status:needs-human,"*)
+            *",status:ready,"*|*",status:in-progress,"*|*",status:needs-decision,"*)
               echo "Issue #$n already past refinement ($labels) — skipping."
               echo "target=" >> "$GITHUB_OUTPUT"; exit 0 ;;
           esac
@@ -95,7 +95,7 @@ jobs:
             If NO — it's ambiguous or under-specified:
               - Post a comment with a SHORT numbered list of the specific questions a human
                 must answer (scope, expected behavior, constraints). Be concrete.
-              - Add `status:needs-human`; remove `status:unrefined`.
+              - Add `status:needs-decision`; remove `status:unrefined`.
               - Do not add a complexity label.
 
             Use `gh issue edit --add-label/--remove-label` and `gh issue comment`. Make the
