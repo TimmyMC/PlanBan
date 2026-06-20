@@ -1,0 +1,112 @@
+name: Agent · reconciler
+
+# The safety net that makes the hook-driven pipeline resilient to Claude usage
+# limits and dropped events. Runs a few times a day, spends no model tokens itself,
+# and only does cheap bookkeeping:
+#   * status:deferred → status:ready   (re-queues a run that hit the usage limit;
+#                                        the labeled hook re-fires agent-implement)
+#   * stale status:in-progress with no PR → re-queued (a run that died mid-flight)
+#   * nudges the oldest status:unrefined issue + the oldest un-reviewed agent PR
+#   * weekly: opens a quality digest issue so the human keeps Overview (§3)
+#
+# Serialized with the agent workflows via agents-global so a nudge can't run a
+# second model session concurrently.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: write # to gh workflow run the agent workflows
+
+concurrency:
+  group: agents-global
+  cancel-in-progress: false
+
+env:
+  STALE_HOURS: "6"
+
+jobs:
+  reconcile:
+    name: Reconcile pipeline state
+    runs-on: ubuntu-latest
+    if: vars.AGENTS_ENABLED == 'true'
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Re-queue deferred issues
+        run: |
+          set -euo pipefail
+          for n in $(gh issue list --state open --label status:deferred --json number --jq '.[].number'); do
+            echo "Re-queueing deferred #$n"
+            gh issue edit "$n" --remove-label status:deferred --add-label status:ready || true
+            # A GITHUB_TOKEN relabel does NOT fire agent-implement's hook, so dispatch it.
+            gh workflow run agent-implement.yml -f issue="$n" || true
+          done
+
+      - name: Reclaim stale in-progress claims
+        run: |
+          set -euo pipefail
+          now=$(date -u +%s)
+          gh issue list --state open --label status:in-progress \
+            --json number,updatedAt --jq '.[] | "\(.number) \(.updatedAt)"' |
+          while read -r n ts; do
+            [ -z "$n" ] && continue
+            # If an open PR closes this issue, the claim is legitimately active — leave it.
+            linked=$(gh pr list --state open --json number,body \
+                       --jq "[.[] | select(.body | test(\"[Cc]loses #${n}\\\\b\"))] | length" 2>/dev/null || echo 0)
+            [ "${linked:-0}" -gt 0 ] && { echo "#$n has an open PR — leaving claimed."; continue; }
+            age=$(( (now - $(date -u -d "$ts" +%s)) / 3600 ))
+            if [ "$age" -ge "$STALE_HOURS" ]; then
+              echo "Reclaiming stale #$n (in-progress ${age}h, no PR)"
+              gh issue edit "$n" --remove-label status:in-progress --add-label status:ready || true
+              # GITHUB_TOKEN relabel won't fire the hook — dispatch implement directly.
+              gh workflow run agent-implement.yml -f issue="$n" || true
+            fi
+          done
+
+      - name: Nudge the oldest unrefined issue
+        run: |
+          set -euo pipefail
+          n=$(gh issue list --state open --label status:unrefined \
+                --json number,createdAt --jq 'sort_by(.createdAt) | .[0].number // empty')
+          if [ -n "${n:-}" ]; then
+            echo "Dispatching refine for oldest unrefined #$n"
+            gh workflow run agent-refine.yml -f issue="$n" || true
+          fi
+
+      - name: Nudge the oldest un-reviewed agent PR
+        run: |
+          set -euo pipefail
+          pr=$(gh pr list --state open --label agent-authored \
+                 --json number,labels,createdAt --jq '
+                   map(select([.labels[].name] | (index("review:passed") or index("review:changes-requested")) | not))
+                   | sort_by(.createdAt) | .[0].number // empty')
+          if [ -n "${pr:-}" ]; then
+            echo "Dispatching review for oldest un-reviewed agent PR #$pr"
+            gh workflow run agent-review.yml -f pr="$pr" || true
+          fi
+
+      - name: Weekly quality digest
+        # Once a week (Monday early UTC) so the cadence doesn't depend on a separate cron.
+        if: github.event_name == 'schedule'
+        run: |
+          set -euo pipefail
+          [ "$(date -u +%u)" = "1" ] && [ "$(date -u +%H)" -lt 6 ] || { echo "Not the weekly window."; exit 0; }
+          since=$(date -u -d '7 days ago' +%Y-%m-%d)
+          merged=$(gh pr list --state merged --label agent-authored --search "merged:>=$since" \
+                     --json number,title --jq '[.[] | "- #\(.number) \(.title)"] | join("\n")' || true)
+          counts=""
+          for s in unrefined refined ready in-progress needs-decision deferred; do
+            c=$(gh issue list --state open --label "status:$s" --json number --jq 'length' || echo 0)
+            counts="${counts}- status:${s}: ${c}\n"
+          done
+          mutants_url="https://github.com/${GH_REPO}/actions/workflows/mutants.yml"
+          body=$(printf "## Agent pipeline — weekly digest\n\n**Agent PRs merged (last 7 days):**\n%s\n\n**Open pipeline state:**\n%b\n**Coverage floors:** see \`.github/coverage-thresholds.json\` (machine-enforced, ratchet-only).\n**Mutation testing:** %s\n\n_Automation rides on top of the deterministic gates; it never relaxes them. Review anything surprising above._" \
+                   "${merged:-_(none)_}" "$counts" "$mutants_url")
+          gh issue create --title "Quality digest — $(date -u +%Y-%m-%d)" --label roadmap --body "$body" || true

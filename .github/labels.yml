@@ -1,0 +1,138 @@
+# THE single source of truth for this repo's GitHub labels.
+#
+# label-sync.yml syncs GitHub to exactly this file on every push to trunk that
+# touches it, with `delete-other-labels: true` — so a label that is not listed
+# here is DELETED from the repo (and removed from any issue/PR carrying it). To
+# add, rename, recolor, or retire a label, edit this file; do not click in the UI.
+#
+# Lives under /.github, so CODEOWNERS + gate-guard rule 6 mean only the owner can
+# change the taxonomy the pipeline runs on.
+
+# ── Complexity → which model tier (if any) implements the issue ─────────────────
+- name: "complexity:haiku"
+  color: "e3f2fd"
+  description: "Small and self-contained; an agent can ship this in one shot."
+- name: "complexity:sonnet"
+  color: "90caf9"
+  description: "Medium scope; may span multiple files or require iteration."
+- name: "complexity:opus"
+  color: "1565c0"
+  description: "Large; multi-session, needs a plan or design phase first."
+- name: "complexity:manual-only"
+  color: "5319e7"
+  description: "Cannot be automated; requires human action in an external system."
+- name: "complexity:mythos"
+  color: "0d0d0d"
+  description: "Foundational; requires human architectural decision before work begins."
+
+# ── Priority (pipeline picks highest priority, then oldest) ─────────────────────
+- name: "priority:critical"
+  color: "b71c1c"
+  description: "Application crash or data loss; must ship immediately."
+- name: "priority:high"
+  color: "e53935"
+  description: "Significant impact; schedule in next cycle."
+- name: "priority:medium"
+  color: "fb8c00"
+  description: "Meaningful improvement; normal queue."
+- name: "priority:low"
+  color: "aed581"
+  description: "Nice to have; backlog."
+
+# ── Issue lifecycle status ──────────────────────────────────────────────────────
+- name: "status:unrefined"
+  color: "ff5722"
+  description: "Lacks acceptance criteria or file mapping; not agent-ready."
+- name: "status:refined"
+  color: "c2e0c6"
+  description: "Agent-refined (acceptance criteria + proposed complexity); awaiting a human's go."
+- name: "status:ready"
+  color: "2e7d32"
+  description: "Human-approved to implement — the go decision that starts an agent."
+- name: "status:in-progress"
+  color: "5c6bc0"
+  description: "Claimed by an implementer agent (prevents double pickup)."
+- name: "status:deferred"
+  color: "fff59d"
+  description: "Postponed (e.g. Claude usage limit); the reconciler will retry."
+- name: "status:needs-decision"
+  color: "ffc107"
+  description: "Blocked on a human: design sign-off, a clarifying answer, or repeated agent failure."
+- name: "status:blocked"
+  color: "d32f2f"
+  description: "Waiting on an external dependency, secret, or third-party action."
+
+# ── Area ────────────────────────────────────────────────────────────────────────
+- name: "area:engine"
+  color: "ededed"
+  description: "Rust core/CLI: crates/core, crates/cli."
+- name: "area:frontend"
+  color: "ededed"
+  description: "React/TypeScript UI: ui/."
+- name: "area:desktop"
+  color: "ededed"
+  description: "Tauri desktop shell: src-tauri/."
+- name: "area:ci"
+  color: "ededed"
+  description: "GitHub Actions, Dependabot, and installer build pipelines."
+- name: "area:tests"
+  color: "ededed"
+  description: "Unit, integration, and e2e test suites."
+- name: "area:docs"
+  color: "ededed"
+  description: "README, changelogs, and developer-facing docs."
+- name: "area:research"
+  color: "ededed"
+  description: "POCs, library evaluation, open-ended discovery."
+
+# ── Type ────────────────────────────────────────────────────────────────────────
+- name: "type:feature"
+  color: "a2eeef"
+  description: "New user-facing capability."
+- name: "type:bug"
+  color: "d73a4a"
+  description: "Something is broken or behaving incorrectly."
+- name: "type:refactor"
+  color: "e8d5b7"
+  description: "Internal restructuring with no behavior change."
+- name: "type:tech-debt"
+  color: "fbca04"
+  description: "Known shortcut to repay; reduces future friction."
+- name: "type:security"
+  color: "b60205"
+  description: "Security vulnerability or hardening."
+
+# ── Pipeline mechanics (on PRs) ─────────────────────────────────────────────────
+- name: "agent-authored"
+  color: "0052cc"
+  description: "PR opened by an implementer agent; routes tier+1 review + auto-merge."
+- name: "review:passed"
+  color: "2e7d32"
+  description: "Tier+1 reviewer approved (mirrors the GitHub review state)."
+- name: "review:changes-requested"
+  color: "e11d48"
+  description: "Tier+1 reviewer requested changes."
+
+# ── Human-in-the-loop controls ──────────────────────────────────────────────────
+- name: "do-not-merge"
+  color: "e11d48"
+  description: "Blocks auto-merge; remove when ready to land."
+- name: "gate-change-approved"
+  color: "0e8a16"
+  description: "Legacy/no-op — gate changes are cleared by an owner review, not this label."
+
+# ── Tracking ────────────────────────────────────────────────────────────────────
+- name: "roadmap"
+  color: "8b949e"
+  description: "Planned roadmap work (tracked as an issue, not in-repo)."
+- name: "tech-debt"
+  color: "8b949e"
+  description: "Deferred cleanup tracked as an issue."
+
+# ── Dependabot (auto-applied to dependency PRs) ─────────────────────────────────
+- name: "dependencies"
+  color: "0366d6"
+  description: "Pull requests that update a dependency file."
+- name: "rust"
+  color: "000000"
+  description: "Pull requests that update rust code."

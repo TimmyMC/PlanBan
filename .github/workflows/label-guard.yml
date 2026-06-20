@@ -1,0 +1,53 @@
+name: Label guard
+
+# Defense-in-depth for the gate approval signal. Gate changes are cleared by an
+# owner *review* (see ci-complete.yml → gate-integrity), not by a label — so the
+# `gate-change-approved` label no longer grants anything. This guard removes that
+# label whenever a non-owner applies it, so a stray or forged label can never be
+# mistaken for approval and the PR's own author can't signal self-approval.
+#
+# Uses `pull_request` (not pull_request_target) deliberately: agent PRs are
+# same-repo (claude/* branches) where the token has write; we never check out PR
+# code here, so there's no untrusted-code exposure.
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  guard:
+    name: Strip forged gate-change-approved
+    if: github.event.label.name == 'gate-change-approved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove the label unless an owner applied it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SENDER: ${{ github.event.sender.login }}
+          # Logins permitted to carry the (legacy) label. Approval itself is via
+          # an owner review; this list only avoids churn if an owner adds it.
+          OWNERS: "TimmyMC"
+        run: |
+          for o in $OWNERS; do
+            if [ "$SENDER" = "$o" ]; then
+              echo "Label applied by owner '$SENDER' — leaving it (note: it does not grant approval; the review does)."
+              exit 0
+            fi
+          done
+          echo "Label applied by non-owner '$SENDER' — removing it."
+          gh api -X DELETE "repos/$REPO/issues/$PR/labels/gate-change-approved" || true
+          MARKER="<!-- label-guard -->"
+          existing=$(gh api "repos/$REPO/issues/$PR/comments" \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
+          [ -n "$existing" ] && exit 0
+          body=$(printf '%s\n' "$MARKER" \
+            "🔒 Removed the \`gate-change-approved\` label applied by \`$SENDER\`." \
+            "" \
+            "Gate changes are cleared by an **owner approving review**, not a label — so this label grants nothing and can't be used to self-approve. An owner must review and Approve the PR to clear the gate.")
+          jq -n --arg b "$body" '{body: $b}' | gh api "repos/$REPO/issues/$PR/comments" -X POST --input -

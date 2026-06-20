@@ -1,0 +1,111 @@
+name: Agent · refine
+
+# Stage 1 of the tiered agent pipeline. Turns a raw `status:unrefined` issue into an
+# actionable spec: acceptance criteria + a *proposed* `complexity:<tier>`, then
+# `status:refined` — OR, when ambiguous, posts clarifying questions and
+# `status:needs-decision`. It NEVER marks an issue `status:ready`: deciding an issue
+# is ready to build is a human's call (Constitution §1). A human reviews the proposal
+# and applies `status:ready`, which is what triggers agent-implement. So the pipeline
+# cannot flow from raw issue to code without a human go-ahead in the middle.
+#
+# Triggered when `status:unrefined` is applied to an issue (issue-triage.yml adds
+# it on open); the reconciler also re-dispatches this for any lingering unrefined
+# issue. Nothing runs until the owner flips the `AGENTS_ENABLED` repo variable to
+# "true" and sets CLAUDE_CODE_OAUTH_TOKEN.
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Issue number to refine (blank = oldest status:unrefined)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+# Serialize ALL agent workflows through one repo-wide queue so we never run more
+# than one model session at a time — the main lever that keeps us inside the
+# Claude usage limit. cancel-in-progress:false so a queued run isn't dropped.
+concurrency:
+  group: agents-global
+  cancel-in-progress: false
+
+jobs:
+  refine:
+    name: Refine issue
+    runs-on: ubuntu-latest
+    # On a label event, only react to status:unrefined being applied.
+    if: >
+      vars.AGENTS_ENABLED == 'true' &&
+      (github.event_name != 'issues' || github.event.label.name == 'status:unrefined')
+    steps:
+      - name: Resolve target issue
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_ISSUE: ${{ github.event.issue.number }}
+          INPUT_ISSUE: ${{ github.event.inputs.issue }}
+        run: |
+          n="${INPUT_ISSUE:-$EVENT_ISSUE}"
+          if [ -z "$n" ]; then
+            # Reconciler/dispatch with no target: take the oldest unrefined issue.
+            n=$(gh issue list --state open --label status:unrefined \
+                  --json number,createdAt --jq 'sort_by(.createdAt) | .[0].number // empty' || true)
+          fi
+          if [ -z "$n" ] || [ "$n" = "null" ]; then
+            echo "No issue to refine."; echo "target=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Only refine issues that are unrefined or have no status yet.
+          labels=$(gh issue view "$n" --json labels --jq '[.labels[].name] | join(",")')
+          case ",$labels," in
+            *",status:refined,"*|*",status:ready,"*|*",status:in-progress,"*|*",status:needs-decision,"*)
+              echo "Issue #$n already past refinement ($labels) — skipping."
+              echo "target=" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          echo "target=$n" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: steps.pick.outputs.target != ''
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Refine with Claude (Sonnet)
+        if: steps.pick.outputs.target != ''
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: '--model claude-sonnet-4-6 --allowed-tools "Bash(gh:*),Read,Grep,Glob"'
+          prompt: |
+            You are the REFINEMENT agent for issue #${{ steps.pick.outputs.target }} in
+            ${{ github.repository }}. Read it with `gh issue view ${{ steps.pick.outputs.target }}`
+            and skim the repo (README, CLAUDE.md, docs/) for context. Do NOT write code.
+
+            Decide whether the issue is actionable: does it describe a concrete, bounded
+            change with enough detail that an implementer could start without guessing?
+
+            If YES — propose it for a human's go-ahead (do NOT start work or mark it ready):
+              - Ensure it has a `priority:<low|medium|high|critical>` label (add one if missing).
+              - Add exactly one *proposed* `complexity:<haiku|sonnet|opus>` label estimating effort:
+                haiku = small/local, sonnet = moderate, opus = large or subtle.
+              - Post a comment with a short "## Acceptance criteria" checklist (what the
+                implementation and review will be judged against) and a one-line note that a
+                human should apply `status:ready` to approve implementation (and may adjust the
+                proposed complexity first).
+              - Add `status:refined`; remove `status:unrefined`.
+              - Do NOT add `status:ready` — that is the human's go decision, not yours.
+
+            If NO — it's ambiguous or under-specified:
+              - Post a comment with a SHORT numbered list of the specific questions a human
+                must answer (scope, expected behavior, constraints). Be concrete.
+              - Add `status:needs-decision`; remove `status:unrefined`.
+              - Do not add a complexity label.
+
+            Use `gh issue edit --add-label/--remove-label` and `gh issue comment`. Make the
+            labels and exactly one comment; then stop.

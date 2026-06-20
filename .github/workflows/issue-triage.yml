@@ -1,0 +1,38 @@
+name: Issue triage
+
+# Every newly opened issue starts life as `status:unrefined`, so it has a defined
+# place in the lifecycle and — when the agent pipeline is on — the refiner picks it
+# up (agent-refine triggers on this label). Always-on and independent of
+# AGENTS_ENABLED: the default is useful even with the pipeline paused. Skips if the
+# issue already carries a status:* label (e.g. opened by automation with a status).
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  default-status:
+    name: Default new issue to unrefined
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add status:unrefined if no status set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          N: ${{ github.event.issue.number }}
+        run: |
+          labels=$(gh issue view "$N" --json labels --jq '[.labels[].name] | join(",")')
+          case ",$labels," in
+            *",status:"*) echo "#$N already has a status label — leaving it."; exit 0 ;;
+            # Tracking issues (e.g. the reconciler's weekly digest) aren't pipeline work.
+            *",roadmap,"*) echo "#$N is a roadmap/tracking issue — not entering the pipeline."; exit 0 ;;
+          esac
+          gh issue edit "$N" --add-label status:unrefined
+          echo "#$N defaulted to status:unrefined."

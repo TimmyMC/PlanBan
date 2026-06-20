@@ -1,9 +1,10 @@
 # Ownership of the quality gates and the machinery that enforces them.
 #
 # The `Gate integrity` CI job (scripts/gate-guard.sh) already blocks auto-merge
-# when a PR weakens any of these without the `gate-change-approved` label. This
-# file is the second layer: enable "Require review from Code Owners" on the
-# `trunk` ruleset and a human review of these paths becomes mandatory too.
+# when a PR weakens any of these unless an owner clears it with an approving review
+# (an identity-bound signal, not a label an agent could self-apply). This file is
+# the second layer: enable "Require review from Code Owners" on the `trunk` ruleset
+# and a human review of these paths becomes mandatory too.
 
 # CI, auto-merge, and the guard itself.
 /.github/                               @TimmyMC
