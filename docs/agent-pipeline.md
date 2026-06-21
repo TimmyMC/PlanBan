@@ -47,6 +47,7 @@ to" is never a control.
 | **Owner** (human, browser, 2FA) | clear gate changes; final-approve opus PRs; merge anything | — must never be an agent's credential |
 | **Implementer** (local Claude Code authed as the **Zlyzart** bot) | branch, push, open draft PRs, comment, non-protected labels | *can* submit reviews (PR-write includes that), but its approval is **inert**: not an `OWNERS` login (can't clear a gate), not in `REVIEWER_LOGINS` (can't trigger auto-merge), and GitHub blocks self-approval. Cannot push to trunk or merge. |
 | **Reviewer** (the installed Claude **GitHub App**) | submit reviews, approve → auto-merge *ordinary* PRs | cannot clear a gate change (not an `OWNERS` login) or approve its own work |
+| **Refiner** (CI Claude via `agent-refine`, runs on **untrusted** issue text) | comment on issues, set non-protected labels, read the repo | runs as the Actions `GITHUB_TOKEN` (can't approve PRs or trigger downstream workflows) with `contents: read` (no code write) and tools `Bash(gh:*),Read,Grep,Glob` (no merge). It processes **any** public author's issue body, so it is the pipeline's prompt-injection **front door** — bounded to issue/label bookkeeping on an ephemeral runner. |
 | **CI `GITHUB_TOKEN`** | run checks, read | cannot approve PRs at all (GitHub blocks the Actions token), nor trigger further workflows |
 
 > **There is no GitHub permission for "open a PR but never approve."** Reviews live under the same
@@ -79,6 +80,18 @@ rides on top of these gates and can never relax them.
    approval from someone other than the last pusher, and dismiss stale approvals.
 
 **Residual risks (named, not hand-waved):**
+- **Untrusted input reaches the refiner — non-collaborators are NOT walled off from the agents.**
+  This is a public repo: anyone can open an issue, and `issue-triage.yml` auto-labels every new one
+  `status:unrefined`, which feeds `agent-refine` — an LLM run over the **raw, attacker-controllable
+  body**. Labels gate the *implementer* (only collaborators can apply `status:*`), but they do not
+  gate the *refiner*; its protection is **containment, not exclusion**. *Contained*: refine holds
+  only the Actions `GITHUB_TOKEN` (`contents: read` + `issues: write`; tools `Bash(gh:*),Read,Grep,
+  Glob`) — ephemeral runner, no code-write, no merge, can't approve or trigger downstream workflows.
+  An injected refiner *could* shuffle labels, including self-applying `status:ready` to the
+  attacker's own issue — but as a `GITHUB_TOKEN` edit that does **not** fire `ready-author-guard`,
+  and the downstream author checks (the implementer's consume-time selector + the reconciler's
+  author re-check, both requiring write access) reject the non-collaborator author, with the
+  least-privilege/​gate floor bounding whatever slips. Worst case is issue/label noise, not code.
 - An injected **reviewer** could approve a PR crafted to inject it → that PR auto-merges. *Contained*:
   the code still passed every deterministic gate, and gate changes / opus PRs still require a human.
   Worst case is "fully-gate-passing malicious code merges," a bounded blast radius — not arbitrary.
