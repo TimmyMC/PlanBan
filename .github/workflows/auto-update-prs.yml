@@ -7,6 +7,14 @@ name: Auto-update PRs
 # and PRs effectively merge in a self-healing cascade (one merges → trunk moves →
 # the next updates → re-tests → merges).
 #
+# Two triggers keep this complete:
+#   * push to trunk        → sweep ALL behind PRs (the cascade as trunk advances).
+#   * a PR opened/synced    → update THAT PR if it's behind, so a freshly-opened or
+#     lone PR doesn't sit stale waiting for the next trunk push to sweep it (which,
+#     for the only open PR, would never come — it can't merge while behind).
+# Both use the native `update-branch` API (merges trunk into the PR head). A real
+# **conflict** (DIRTY) is deliberately left for a human — never auto-resolved.
+#
 # Why a PAT, not GITHUB_TOKEN: a branch update pushed by the default GITHUB_TOKEN
 # does NOT re-trigger the PR's `pull_request` CI (GitHub's recursion guard), so CI
 # would never re-run. AUTOMERGE_PAT (a PAT with contents + pull-requests write)
@@ -17,17 +25,23 @@ name: Auto-update PRs
 on:
   push:
     branches: [trunk]
+  pull_request:
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
   pull-requests: read
 
 concurrency:
-  group: auto-update-prs
+  # Separate the trunk-push sweep from each PR's own update so they never cancel
+  # one another (a new PR event must not abort an in-flight trunk sweep).
+  group: auto-update-prs-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   update:
+    # The cascade: when trunk advances, sweep every behind PR.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Update behind PRs to the latest trunk
@@ -60,3 +74,39 @@ jobs:
               fi
               echo "::endgroup::"
             done
+
+  update-this:
+    # A PR opened/synced behind trunk: bring just this one up to date now, instead
+    # of waiting for the next trunk push to sweep it.
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.base.ref == 'trunk' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update this PR to the latest trunk if behind
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_PAT }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::AUTOMERGE_PAT not set — skipping (a GITHUB_TOKEN update won't re-run CI)."
+            exit 0
+          fi
+
+          # Let GitHub recompute this PR's mergeStateStatus against trunk first.
+          sleep 20
+
+          # Only BEHIND auto-updates; DIRTY (conflict) / BLOCKED (failing/pending
+          # checks) are left for a human, same as the trunk-push sweep above.
+          state=$(gh pr view "$PR" --repo "$REPO" --json mergeStateStatus --jq '.mergeStateStatus')
+          if [ "$state" != "BEHIND" ]; then
+            echo "#$PR is $state — no update needed."
+            exit 0
+          fi
+          if gh api --method PUT "repos/$REPO/pulls/$PR/update-branch" --silent; then
+            echo "updated #$PR — its CI will re-run against the latest trunk"
+          else
+            echo "::warning::could not update #$PR (resolve any conflict manually)"
+          fi
