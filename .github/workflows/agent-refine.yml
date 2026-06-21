@@ -5,8 +5,8 @@ name: Agent · refine
 # `status:refined` — OR, when ambiguous, posts clarifying questions and
 # `status:needs-decision`. It NEVER marks an issue `status:ready`: deciding an issue
 # is ready to build is a human's call (Constitution §1). A human reviews the proposal
-# and applies `status:ready`, which is what triggers agent-implement. So the pipeline
-# cannot flow from raw issue to code without a human go-ahead in the middle.
+# and applies `status:ready`, which the local /implement-next routine acts on. So the
+# pipeline cannot flow from raw issue to code without a human go-ahead in the middle.
 #
 # Triggered when `status:unrefined` is applied to an issue (issue-triage.yml adds
 # it on open); the reconciler also re-dispatches this for any lingering unrefined
