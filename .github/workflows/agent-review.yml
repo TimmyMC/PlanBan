@@ -33,6 +33,10 @@ permissions:
   id-token: write # claude-code-action@v1 exchanges an OIDC token for auth
 
 concurrency:
+  # One agent model session at a time across review + refine + reconciler — so never
+  # more than one reviewer runs concurrently (the main usage-limit / token lever).
+  # Redundant triggers don't waste tokens: the resolve step skips already-reviewed or
+  # already-approved PRs before the model step runs.
   group: agents-global
   cancel-in-progress: false
 
@@ -77,6 +81,18 @@ jobs:
             complexity:opus)   model="claude-opus-4-8";   human="true"  ;;
             *) echo "PR #$PR has no complexity tier — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0 ;;
           esac
+          # Don't burn tokens on redundant reviews (the auto-update cascade re-runs CI,
+          # and one SHA can trigger several events). Skip if the PR is already approved
+          # (auto-merge will take it) or this exact commit was already reviewed.
+          head=$(gh pr view "$PR" --json headRefOid --jq '.headRefOid')
+          if [ "$(gh pr view "$PR" --json reviewDecision --jq '.reviewDecision // ""')" = "APPROVED" ]; then
+            echo "PR #$PR already approved — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          reviewed=$(gh api "repos/$GH_REPO/pulls/$PR/reviews" \
+            --jq "[.[] | select(.commit_id==\"$head\" and .state!=\"PENDING\")] | length")
+          if [ "${reviewed:-0}" -gt 0 ]; then
+            echo "PR #$PR @ $head already reviewed — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           echo "pr=$PR"        >> "$GITHUB_OUTPUT"
           echo "model=$model"  >> "$GITHUB_OUTPUT"
           echo "human=$human"  >> "$GITHUB_OUTPUT"
@@ -108,35 +124,29 @@ jobs:
           # Per claude-code-action docs, only set github_token when wiring your OWN
           # custom app instead of the installed one. (Was: secrets.REVIEWER_TOKEN, a
           # PAT — unsupported now; the App is the supported reviewer auth.)
-          additional_permissions: |
-            actions: read
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
           claude_args: '--model ${{ steps.pick.outputs.model }} --allowed-tools "Bash,Read,Grep,Glob"'
           prompt: |
-            Review PR #${{ steps.pick.outputs.pr }} in ${{ github.repository }} as a
-            senior reviewer one tier above the author. Read the PR diff and the linked
-            issue's "Acceptance criteria" comment.
+            Review the code changes in PR #${{ steps.pick.outputs.pr }} of
+            ${{ github.repository }}. Look ONLY at the diff: correctness, bugs, and
+            logic. Do NOT comment on CI status (gated separately), the Constitution /
+            CLAUDE.md, or process. No preamble, no headers, no recap of the PR.
 
-            Judge: (a) does it meet the acceptance criteria, (b) is it correct, (c) does
-            it follow CLAUDE.md / docs/CONSTITUTION.md, (d) are tests adequate (not
-            coverage-gaming — assertions must be meaningful)? Run `/code-review` on the PR
-            for the detailed pass. Confirm CI is green via `gh pr checks ${{ steps.pick.outputs.pr }}`.
+            You ARE the authorized reviewer (the installed claude[bot] App) in the
+            trusted reviewer context — submit the review YOURSELF with `gh`; never defer
+            it or settle for a plain comment.
 
-            You ARE the authorized reviewer identity (the installed claude[bot] App) and
-            this is the trusted reviewer context — submit the formal review YOURSELF with
-            `gh`. Do not defer the approval to any other identity or settle for a comment.
+            Run `/code-review` for the detailed pass, then act with `gh`:
+            - A real problem in the code → `gh pr review ${{ steps.pick.outputs.pr }} --request-changes`
+              with specific file:line findings only; add the `review:changes-requested`
+              label and remove `review:passed`; keep it a draft.
+            - The code is correct → `gh pr review ${{ steps.pick.outputs.pr }} --approve`
+              with a body of at most 3 short bullets naming what you checked in the diff;
+              add `review:passed` and remove `review:changes-requested`;
+              `gh pr ready ${{ steps.pick.outputs.pr }}`.
+            - human-required "${{ steps.pick.outputs.human }}" == "true" (opus tier): do
+              NOT approve or mark ready — post a brief, code-focused assessment and note a
+              human must approve.
 
-            Then act with `gh`:
-            - If it does NOT pass: `gh pr review ${{ steps.pick.outputs.pr }} --request-changes`
-              with SPECIFIC inline findings, add the `review:changes-requested` label, and
-              leave the PR as a draft. Do not approve.
-            - If it passes AND human-required is "${{ steps.pick.outputs.human }}" == "false":
-              `gh pr review ${{ steps.pick.outputs.pr }} --approve` with a body that lists
-              what you checked (criteria, correctness, tests), add `review:passed`, and
-              `gh pr ready ${{ steps.pick.outputs.pr }}` so auto-merge can take it.
-            - If human-required is "true" (opus tier): do NOT approve or mark ready. Post your
-              assessment as a normal review/comment and add a note that a human must give the
-              final approval. The merge stays a human decision.
-
-            A bare approval is not acceptable — always state specifically what you verified.
+            Be terse. No fluff or bloat.
