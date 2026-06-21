@@ -8,7 +8,10 @@
 //! The DB path and all config are read from `clabby.toml` discovered from the
 //! working directory at startup — same discovery as the CLI (Constitution §7).
 //! Run from a Clabby project directory: `cargo tauri dev` or `cargo run` from
-//! `src-tauri/`.
+//! `src-tauri/`. Set `CLABBY_PROJECT` to a project directory to start discovery
+//! there instead of the working directory — `tauri dev` always runs the binary
+//! from `src-tauri/` (which has no config), so `just desktop` sets this to point
+//! the shell at an example project.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // The shell is a driver entry point; unwrap/expect on startup errors is fine here.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -19,6 +22,7 @@ use clabby_core::events::EventBus;
 use clabby_core::model::{GitState, Session};
 use clabby_core::overview::OverviewRow;
 use serde::Serialize;
+use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 // ---- Application state (managed by Tauri, shared across commands) -----------
@@ -212,9 +216,15 @@ fn start_event_forwarding(app: AppHandle, bus: &EventBus) {
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            let cwd = std::env::current_dir().unwrap_or_default();
-            let config = Config::discover(&cwd)
-                .expect("clabby.toml not found — run Clabby from a project directory");
+            // `CLABBY_PROJECT` lets a launcher (e.g. `just desktop`) point the
+            // shell at a project dir, since `tauri dev` runs us from `src-tauri/`
+            // which has no config. Falls back to the working directory.
+            let start = std::env::var_os("CLABBY_PROJECT")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let config = Config::discover(&start).expect(
+                "clabby.toml not found — run Clabby from a project directory or set CLABBY_PROJECT",
+            );
 
             let bus = EventBus::new();
             let db = tauri::async_runtime::block_on(Db::connect(config.db_file()))
