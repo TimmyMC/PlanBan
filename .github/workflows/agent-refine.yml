@@ -26,6 +26,7 @@ on:
 permissions:
   contents: read
   issues: write
+  id-token: write # claude-code-action@v1 exchanges an OIDC token for auth
 
 # Serialize ALL agent workflows through one repo-wide queue so we never run more
 # than one model session at a time — the main lever that keeps us inside the
