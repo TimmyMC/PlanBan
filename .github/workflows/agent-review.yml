@@ -17,7 +17,13 @@ name: Agent · review
 # via the reconciler's dispatch. The PR is resolved from the CI run's head SHA.
 on:
   workflow_run:
-    workflows: ["CI complete"]
+    # Every CI workflow whose checks must be green before we review. We re-evaluate on
+    # each one's completion; the run fired by whichever finishes LAST finds all checks
+    # green (see the all-green gate in the resolve step) and proceeds, earlier ones skip.
+    # CI complete is the slowest, so it's usually last; CodeQL is GitHub's default-setup
+    # code-scanning workflow. The gate is the real guarantee — this list just makes sure
+    # a late finisher re-triggers the check.
+    workflows: ["CI complete", "CodeQL"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -92,6 +98,13 @@ jobs:
             --jq "[.[] | select(.commit_id==\"$head\" and .state!=\"PENDING\")] | length")
           if [ "${reviewed:-0}" -gt 0 ]; then
             echo "PR #$PR @ $head already reviewed — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Don't start until ALL the PR's checks pass — `gh pr checks` exits non-zero
+          # while any check is still failing or pending. (We're re-triggered on each CI
+          # workflow's completion, so the last one to finish gets through here.)
+          if ! gh pr checks "$PR" >/dev/null 2>&1; then
+            echo "PR #$PR checks not all green yet — skipping until they are."
+            echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
           fi
           echo "pr=$PR"        >> "$GITHUB_OUTPUT"
           echo "model=$model"  >> "$GITHUB_OUTPUT"
