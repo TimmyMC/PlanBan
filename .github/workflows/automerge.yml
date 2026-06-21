@@ -36,11 +36,16 @@ jobs:
   merge:
     name: merge passing PR
     runs-on: ubuntu-latest
-    # workflow_run: only a successful CI run for a PR. review: only an approval.
+    # workflow_run: a successful CI run for a PR. We accept CI runs triggered by
+    # pull_request *and* pull_request_review, because a gate-change PR's "CI complete"
+    # re-runs on the owner's approval (to re-evaluate gate-integrity) — that re-run is
+    # what flips it green, and automerge must fire on it. review: an approval landing
+    # after CI already finished. The merge step re-verifies everything either way.
     if: >
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'pull_request') ||
+       (github.event.workflow_run.event == 'pull_request' ||
+        github.event.workflow_run.event == 'pull_request_review')) ||
       (github.event_name == 'pull_request_review' &&
        github.event.review.state == 'approved')
     steps:
@@ -77,8 +82,16 @@ jobs:
           case ",$labels," in *",do-not-merge,"*) echo "PR #$pr held by do-not-merge — skip."; exit 0 ;; esac
 
           # 3) CI complete must be green (re-checked for the review-triggered path).
-          ci=$(gh pr view "$pr" --json statusCheckRollup \
-                 --jq '[.statusCheckRollup[] | select(.name=="CI complete")][0].conclusion // "PENDING"')
+          # Take the LATEST "CI complete" run, not the first in the rollup: a gate-change
+          # PR fails CI complete on the pre-approval push, so after the owner approves and
+          # it re-runs green, BOTH a stale FAILURE and the fresh SUCCESS sit on the commit.
+          # Indexing [0] could grab the stale failure and wrongly decline the merge. Also
+          # wait if any "CI complete" run is still in flight.
+          ci=$(gh pr view "$pr" --json statusCheckRollup --jq '
+                 [.statusCheckRollup[] | select(.name == "CI complete")]
+                 | if any(.status != "COMPLETED") then "PENDING"
+                   else (sort_by(.completedAt) | last | .conclusion) // "PENDING"
+                   end')
           if [ "$ci" != "SUCCESS" ]; then echo "PR #$pr: CI complete is $ci — wait."; exit 0; fi
 
           # 4) Eligibility.

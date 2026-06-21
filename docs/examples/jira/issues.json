@@ -5,9 +5,15 @@
       "self": "http://jira.local/PROJ-12",
       "fields": {
         "summary": "Implement tracker sync",
-        "status": { "name": "In Progress" },
-        "assignee": { "displayName": "You" },
-        "labels": ["backend"]
+        "status": {
+          "name": "Done"
+        },
+        "assignee": {
+          "displayName": "You"
+        },
+        "labels": [
+          "backend"
+        ]
       }
     },
     {
@@ -15,8 +21,12 @@
       "self": "http://jira.local/PROJ-31",
       "fields": {
         "summary": "Review the worktree PR",
-        "status": { "name": "In Review" },
-        "assignee": { "displayName": "You" },
+        "status": {
+          "name": "Done"
+        },
+        "assignee": {
+          "displayName": "You"
+        },
         "labels": []
       }
     },
@@ -25,9 +35,15 @@
       "self": "http://jira.local/PROJ-44",
       "fields": {
         "summary": "Fix flaky integration test",
-        "status": { "name": "In Progress" },
-        "assignee": { "displayName": "You" },
-        "labels": ["ci"]
+        "status": {
+          "name": "Done"
+        },
+        "assignee": {
+          "displayName": "You"
+        },
+        "labels": [
+          "ci"
+        ]
       }
     }
   ]
