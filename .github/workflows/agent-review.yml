@@ -90,6 +90,11 @@ jobs:
 
       - name: Review with Claude (tier+1)
         if: steps.pick.outputs.pr != ''
+        env:
+          # Marks the trusted CI reviewer context so the repo's deny-pr-write.sh
+          # PreToolUse hook permits THIS session to `gh pr review` (its job).
+          # The hook still blocks reviews/merges from local + interactive agents.
+          CLABBY_REVIEW_CONTEXT: agent-review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -117,6 +122,10 @@ jobs:
             it follow CLAUDE.md / docs/CONSTITUTION.md, (d) are tests adequate (not
             coverage-gaming — assertions must be meaningful)? Run `/code-review` on the PR
             for the detailed pass. Confirm CI is green via `gh pr checks ${{ steps.pick.outputs.pr }}`.
+
+            You ARE the authorized reviewer identity (the installed claude[bot] App) and
+            this is the trusted reviewer context — submit the formal review YOURSELF with
+            `gh`. Do not defer the approval to any other identity or settle for a comment.
 
             Then act with `gh`:
             - If it does NOT pass: `gh pr review ${{ steps.pick.outputs.pr }} --request-changes`
