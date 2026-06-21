@@ -112,8 +112,8 @@ least-privilege **Zlyzart** bot — driven by the `/implement-next` routine
 a local implementer is a credential on a real machine, so a prompt-injected run could reach the
 whole box. We accept that **only** because (a) the implementer identity is least-privilege
 (Zlyzart: Write, not `OWNERS`/CODEOWNERS — its approvals are inert, it can't merge or clear a
-gate), (b) the deterministic gates are unchanged, and (c) only **repo collaborators'** issues are
-implemented (enforced by `ready-author-guard.yml`: collaborator-authored AND owner-promoted), so
+gate), (b) the deterministic gates are unchanged, and (c) only **write-collaborators'** issues are
+implemented (enforced by `ready-author-guard.yml`: write-collaborator-authored AND admin-promoted), so
 the issue body feeding the local agent is never attacker-authored. For unattended runs, run the
 local implementer in an **isolated environment** (container/VM/dedicated OS user), never your
 daily login — Zlyzart bounds the *GitHub* authority but not the *machine*.
@@ -135,12 +135,13 @@ daily login — Zlyzart bounds the *GitHub* authority but not the *machine*.
    change.
 
 The **author allowlist needs no config**: `ready-author-guard.yml` only lets an issue hold
-`status:ready` when it is **authored by a repo collaborator** (read from `author_association`,
-auto-maintained — manage it via Settings → Collaborators) **and** was **promoted to ready by an
-`OWNERS` login** (the human go-decision). Otherwise it strips `status:ready` → `status:needs-decision`.
-The owner-promoter check stops a hijacked bot (itself a collaborator) from self-authoring +
-self-promoting an issue. `/implement-next` likewise selects only collaborator-authored issues and
-re-queues failures to `status:deferred` (never `status:ready`) so the reconciler re-promotes.
+`status:ready` when it is **authored by a write collaborator** **and** was **promoted to ready
+by a repo admin** (the human go-decision) — both read live from the collaborator-permission API
+(no hardcoded list; manage trust via Settings → Collaborators). Otherwise it strips
+`status:ready` → `status:needs-decision`. The admin-promoter check stops a hijacked bot (itself a
+write collaborator) from self-authoring + self-promoting an issue. `/implement-next` likewise
+selects only write-collaborator-authored issues and re-queues failures to `status:deferred`
+(never `status:ready`) so the reconciler re-promotes.
 
 ## Labels
 
