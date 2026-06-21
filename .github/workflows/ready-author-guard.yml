@@ -19,8 +19,12 @@ name: Ready author guard
 # Both checks fail CLOSED: if the permission API can't be reached the label is revoked.
 # If either fails, `status:ready` is stripped and the issue goes to
 # `status:needs-decision`. A relabel by the reconciler's GITHUB_TOKEN does NOT fire
-# this event (GitHub anti-recursion), so legitimate deferred→ready re-queues are
-# unaffected; this only ever judges human/PAT-applied promotions.
+# this event (GitHub anti-recursion), so this guard only ever judges human/PAT-applied
+# promotions. That is NOT a free pass for the reconciler path: reconciler.yml re-runs
+# the author write-access check itself before any deferred/stale → ready re-promotion,
+# so "status:ready ⇒ write-collaborator author" holds on every path, not just this one.
+# (The admin-promoter check is this event's job; a reconciler re-queue after a transient
+# failure is not a fresh go-decision, so it re-verifies authorship only.)
 #
 # Always-on, independent of AGENTS_ENABLED. Belt-and-suspenders: the /implement-next
 # routine ALSO restricts to write-collaborator-authored issues. The owner identity is

@@ -16,10 +16,13 @@ prompt-injected run can ignore, edit, or misread any instruction or script here,
 of it can be trusted to *contain* a bad run. The real boundaries live where this agent
 can't reach them:
 
-1. **Server-side `ready-author-guard.yml`** — an issue can only *hold* `status:ready` when
-   it was authored by a write collaborator AND promoted by a repo admin. This runs in CI,
-   not under this agent's control, so it is the actual author trust boundary: by the time
-   an issue is `status:ready`, its body has already been vetted as collaborator-authored.
+1. **Server-side author vetting** — an issue can only *hold* `status:ready` when its author
+   is a write collaborator. `ready-author-guard.yml` enforces this (plus an admin promoter)
+   on human/PAT label events; `reconciler.yml` re-checks author write-access before any
+   `deferred`/stale → `ready` re-promotion (that path bypasses the guard via GitHub's
+   anti-recursion rule). Both run in CI, outside this agent's control — so by the time an
+   issue is `status:ready`, its body has already been vetted as write-collaborator-authored
+   on every path.
 2. **Least-privilege Zlyzart identity** — this session can branch, push, open draft PRs,
    and comment, nothing more. It cannot merge, cannot effectively approve (not in
    `REVIEWER_LOGINS`, GitHub blocks self-approval), cannot push to `trunk`, and cannot
