@@ -1,50 +1,66 @@
-{
-  "issues": [
-    {
-      "key": "PROJ-12",
-      "self": "http://jira.local/PROJ-12",
-      "fields": {
-        "summary": "Implement tracker sync",
-        "status": {
-          "name": "Done"
-        },
-        "assignee": {
-          "displayName": "You"
-        },
-        "labels": [
-          "backend"
-        ]
-      }
-    },
-    {
-      "key": "PROJ-31",
-      "self": "http://jira.local/PROJ-31",
-      "fields": {
-        "summary": "Review the worktree PR",
-        "status": {
-          "name": "Done"
-        },
-        "assignee": {
-          "displayName": "You"
-        },
-        "labels": []
-      }
-    },
-    {
-      "key": "PROJ-44",
-      "self": "http://jira.local/PROJ-44",
-      "fields": {
-        "summary": "Fix flaky integration test",
-        "status": {
-          "name": "Done"
-        },
-        "assignee": {
-          "displayName": "You"
-        },
-        "labels": [
-          "ci"
-        ]
-      }
+[
+  {
+    "key": "PROJ-12",
+    "self": "https://example.atlassian.net/rest/api/3/issue/10012",
+    "fields": {
+      "summary": "Implement tracker sync",
+      "status": {
+        "name": "In Progress",
+        "statusCategory": { "key": "indeterminate", "name": "In Progress" }
+      },
+      "assignee": { "displayName": "You", "emailAddress": "you@example.com" },
+      "issuetype": { "name": "Task" },
+      "priority": { "name": "Medium" },
+      "labels": ["backend"],
+      "customfield_10020": [{ "name": "Sprint 42", "state": "active" }]
     }
-  ]
-}
+  },
+  {
+    "key": "PROJ-31",
+    "self": "https://example.atlassian.net/rest/api/3/issue/10031",
+    "fields": {
+      "summary": "Review the worktree PR",
+      "status": {
+        "name": "In Review",
+        "statusCategory": { "key": "indeterminate", "name": "In Progress" }
+      },
+      "assignee": { "displayName": "You", "emailAddress": "you@example.com" },
+      "issuetype": { "name": "Task" },
+      "priority": { "name": "Medium" },
+      "labels": [],
+      "customfield_10020": [{ "name": "Sprint 42", "state": "active" }]
+    }
+  },
+  {
+    "key": "PROJ-44",
+    "self": "https://example.atlassian.net/rest/api/3/issue/10044",
+    "fields": {
+      "summary": "Fix flaky integration test",
+      "status": {
+        "name": "In Progress",
+        "statusCategory": { "key": "indeterminate", "name": "In Progress" }
+      },
+      "assignee": { "displayName": "You", "emailAddress": "you@example.com" },
+      "issuetype": { "name": "Task" },
+      "priority": { "name": "Medium" },
+      "labels": ["ci"],
+      "customfield_10020": [{ "name": "Sprint 42", "state": "active" }]
+    }
+  },
+  {
+    "key": "PROJ-58",
+    "self": "https://example.atlassian.net/rest/api/3/issue/10058",
+    "fields": {
+      "summary": "Draft the onboarding guide",
+      "status": {
+        "name": "To Do",
+        "statusCategory": { "key": "new", "name": "To Do" }
+      },
+      "assignee": { "displayName": "You", "emailAddress": "you@example.com" },
+      "issuetype": { "name": "Task" },
+      "priority": { "name": "Medium" },
+      "labels": ["docs"],
+      "customfield_10020": []
+    }
+  }
+]

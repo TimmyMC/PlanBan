@@ -7,27 +7,44 @@ name: Auto-update PRs
 # and PRs effectively merge in a self-healing cascade (one merges → trunk moves →
 # the next updates → re-tests → merges).
 #
+# Two triggers keep this complete:
+#   * push to trunk        → sweep ALL behind PRs (the cascade as trunk advances).
+#   * a PR opened/synced    → update THAT PR if it's behind, so a freshly-opened or
+#     lone PR doesn't sit stale waiting for the next trunk push to sweep it (which,
+#     for the only open PR, would never come — it can't merge while behind).
+# Both use the native `update-branch` API (merges trunk into the PR head). A real
+# **conflict** (DIRTY) is deliberately left for a human — never auto-resolved.
+#
 # Why a PAT, not GITHUB_TOKEN: a branch update pushed by the default GITHUB_TOKEN
 # does NOT re-trigger the PR's `pull_request` CI (GitHub's recursion guard), so CI
-# would never re-run. AUTOMERGE_PAT (a PAT with contents + pull-requests write)
-# makes the update look like a real push. If the secret is unset, this no-ops with
-# a warning. (Stale *running* CI is cancelled separately by the `concurrency` block
-# in ci-complete.yml.)
+# would never re-run. AUTOMERGE_PAT (contents + pull-requests write, created as the
+# least-privilege Zlyzart bot — never the owner) makes the update look like a real
+# push. If the secret is unset the job FAILS LOUDLY — it used to exit 0 with a
+# warning, which silently hid for a long time that the secret was never set. Run the
+# sweep on demand via `workflow_dispatch`. (Stale *running* CI is cancelled
+# separately by the `concurrency` block in ci-complete.yml.)
 
 on:
   push:
     branches: [trunk]
+  pull_request:
+    types: [opened, reopened, synchronize]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
   pull-requests: read
 
 concurrency:
-  group: auto-update-prs
+  # Separate the trunk-push sweep from each PR's own update so they never cancel
+  # one another (a new PR event must not abort an in-flight trunk sweep).
+  group: auto-update-prs-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   update:
+    # The cascade: when trunk advances (or run manually), sweep every behind PR.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Update behind PRs to the latest trunk
@@ -36,8 +53,8 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::warning::AUTOMERGE_PAT not set — skipping. A branch update by GITHUB_TOKEN won't re-run CI, so a PAT is required (see the setup issue)."
-            exit 0
+            echo "::error::AUTOMERGE_PAT is not set — auto-update cannot run. A branch update by the default GITHUB_TOKEN does not re-trigger CI, so a PAT (Zlyzart bot, contents + pull-requests write) is required. Set the AUTOMERGE_PAT secret."
+            exit 1
           fi
 
           # Give GitHub a moment to recompute each PR's mergeStateStatus against
@@ -60,3 +77,39 @@ jobs:
               fi
               echo "::endgroup::"
             done
+
+  update-this:
+    # A PR opened/synced behind trunk: bring just this one up to date now, instead
+    # of waiting for the next trunk push to sweep it.
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.base.ref == 'trunk' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update this PR to the latest trunk if behind
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_PAT }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::AUTOMERGE_PAT is not set — cannot keep this PR current with trunk. Set the AUTOMERGE_PAT secret (Zlyzart bot, contents + pull-requests write)."
+            exit 1
+          fi
+
+          # Let GitHub recompute this PR's mergeStateStatus against trunk first.
+          sleep 20
+
+          # Only BEHIND auto-updates; DIRTY (conflict) / BLOCKED (failing/pending
+          # checks) are left for a human, same as the trunk-push sweep above.
+          state=$(gh pr view "$PR" --repo "$REPO" --json mergeStateStatus --jq '.mergeStateStatus')
+          if [ "$state" != "BEHIND" ]; then
+            echo "#$PR is $state — no update needed."
+            exit 0
+          fi
+          if gh api --method PUT "repos/$REPO/pulls/$PR/update-branch" --silent; then
+            echo "updated #$PR — its CI will re-run against the latest trunk"
+          else
+            echo "::warning::could not update #$PR (resolve any conflict manually)"
+          fi
