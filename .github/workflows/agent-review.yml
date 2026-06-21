@@ -99,11 +99,19 @@ jobs:
           if [ "${reviewed:-0}" -gt 0 ]; then
             echo "PR #$PR @ $head already reviewed — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          # Don't start until ALL the PR's checks pass — `gh pr checks` exits non-zero
-          # while any check is still failing or pending. (We're re-triggered on each CI
-          # workflow's completion, so the last one to finish gets through here.)
-          if ! gh pr checks "$PR" >/dev/null 2>&1; then
-            echo "PR #$PR checks not all green yet — skipping until they are."
+          # Don't start if real lint/test checks are failing or pending. Gate integrity is
+          # a human-auth gate (owner must approve), not a code-quality failure — a PR that
+          # only fails gate integrity can and should still get a code review. We're
+          # re-triggered on each CI workflow's completion, so the last one to finish is
+          # where failing/pending reach zero and we proceed.
+          checks=$(gh pr checks "$PR" --json name,conclusion 2>/dev/null || echo '[]')
+          failing=$(printf '%s' "$checks" \
+            | jq '[.[] | select((.conclusion // "" | ascii_downcase) == "failure")
+                         | select(.name != "Gate integrity" and .name != "CI complete")] | length')
+          pending=$(printf '%s' "$checks" \
+            | jq '[.[] | select(.conclusion == null or .conclusion == "")] | length')
+          if [ "${failing:-1}" -gt 0 ] || [ "${pending:-1}" -gt 0 ]; then
+            echo "PR #$PR not ready (failing=$failing, pending=$pending) — skipping."
             echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
           fi
           echo "pr=$PR"        >> "$GITHUB_OUTPUT"
