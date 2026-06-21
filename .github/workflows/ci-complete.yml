@@ -174,13 +174,10 @@ jobs:
           done <<< "$FILES"
           # Assemble the body line-by-line (indentation-independent — no heredoc).
           lines=("$MARKER"
-            "## ⚠️ Gate integrity blocked this PR" ""
-            "The guard detected a change to CI/test machinery that could weaken the gate." "")
+            "**Gate integrity:** this PR changes CI/test machinery — an owner must approve it to unblock (CI re-runs on approval). If unintended, restore the original gate instead.")
           if [ -n "$links" ]; then
-            lines+=("**Flagged files:**" "" "$links")
+            lines+=("" "$links")
           fi
-          lines+=("**To unblock:** an owner must **approve this PR with a review** (Files changed → Review changes → Approve). CI re-runs on the approval and this check clears. A label can no longer clear it — only an identity-bound owner review can, so an agent can't self-approve its own gate change." ""
-            "If the change was unintentional (test removed, threshold lowered), restore the original gate instead.")
           body=$(printf '%s\n' "${lines[@]}")
           jq -n --arg body "$body" '{body: $body}' \
             | gh api "repos/$REPO/issues/$PR/comments" -X POST --input -
