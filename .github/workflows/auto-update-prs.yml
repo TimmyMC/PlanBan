@@ -70,10 +70,12 @@ jobs:
           | while read -r pr; do
               [ -z "$pr" ] && continue
               echo "::group::Updating PR #$pr"
-              if gh api --method PUT "repos/$REPO/pulls/$pr/update-branch" --silent; then
+              if err=$(gh api --method PUT "repos/$REPO/pulls/$pr/update-branch" 2>&1); then
                 echo "updated #$pr — its CI will re-run against the latest trunk"
               else
-                echo "::warning::could not update #$pr (resolve any conflict manually)"
+                # Surface the real reason: a 403 means AUTOMERGE_PAT lacks contents
+                # write (or the repo isn't in its scope), NOT a merge conflict.
+                echo "::warning::could not update #$pr: $err"
               fi
               echo "::endgroup::"
             done
@@ -81,10 +83,18 @@ jobs:
   update-this:
     # A PR opened/synced behind trunk: bring just this one up to date now, instead
     # of waiting for the next trunk push to sweep it.
+    #
+    # Dependabot is excluded on purpose: a `pull_request` run for a Dependabot PR
+    # executes in GitHub's secret-isolated Dependabot context, where `AUTOMERGE_PAT`
+    # is unavailable — so this job could only ever fail, posting a red check that the
+    # strict ruleset then counts toward BLOCKED. Dependabot PRs are instead rebased by
+    # the trunk-push `update` sweep (which runs with full secrets) or by an explicit
+    # `@dependabot rebase` (Dependabot rebases its own branch and re-runs CI as itself).
     if: >
       github.event_name == 'pull_request' &&
       github.event.pull_request.base.ref == 'trunk' &&
-      github.event.pull_request.draft == false
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Update this PR to the latest trunk if behind
@@ -108,8 +118,10 @@ jobs:
             echo "#$PR is $state — no update needed."
             exit 0
           fi
-          if gh api --method PUT "repos/$REPO/pulls/$PR/update-branch" --silent; then
+          if err=$(gh api --method PUT "repos/$REPO/pulls/$PR/update-branch" 2>&1); then
             echo "updated #$PR — its CI will re-run against the latest trunk"
           else
-            echo "::warning::could not update #$PR (resolve any conflict manually)"
+            # Surface the real reason (e.g. a 403 = AUTOMERGE_PAT missing contents
+            # write / repo not in scope), rather than blaming a phantom conflict.
+            echo "::warning::could not update #$PR: $err"
           fi
