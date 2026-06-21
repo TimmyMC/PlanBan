@@ -110,13 +110,17 @@ least-privilege **Zlyzart** bot — driven by the `/implement-next` routine
 
 *Why this shape:* a CI implementer is an ephemeral, repo-scoped token in a throwaway runner;
 a local implementer is a credential on a real machine, so a prompt-injected run could reach the
-whole box. We accept that **only** because (a) the implementer identity is least-privilege
-(Zlyzart: Write, not `OWNERS`/CODEOWNERS — its approvals are inert, it can't merge or clear a
-gate), (b) the deterministic gates are unchanged, and (c) only **write-collaborators'** issues are
-implemented (enforced by `ready-author-guard.yml`: write-collaborator-authored AND admin-promoted), so
-the issue body feeding the local agent is never attacker-authored. For unattended runs, run the
-local implementer in an **isolated environment** (container/VM/dedicated OS user), never your
-daily login — Zlyzart bounds the *GitHub* authority but not the *machine*.
+whole box. We accept that **only** because of **containment**, the two boundaries a hijacked run can't
+cross: (a) the implementer identity is least-privilege (Zlyzart: Write, not `OWNERS`/CODEOWNERS
+— its approvals are inert, it can't merge or clear a gate), and (b) the deterministic gates are
+unchanged. The author controls — `ready-author-guard.yml` (write-collaborator-authored AND
+admin-promoted) and the reconciler's author re-check — are **defense-in-depth, not part of that
+acceptance**: the guard is *reactive* (it strips a bad `status:ready` after the fact, so there's
+a TOCTOU window) and the `/implement-next` selector that re-checks at consume-time lives in a
+prompt, so neither can contain a hijacked run. Their value is keeping an *honest* run from being
+handed attacker-authored input. For unattended runs, run the local implementer in an **isolated
+environment** (container/VM/dedicated OS user), never your daily login — Zlyzart bounds the
+*GitHub* authority but not the *machine*.
 
 1. **Identities** — install the Claude **GitHub App** on the repo (e.g. via `/install-github-app`)
    with **Pull requests: Read & Write** so it can approve. Run interactive/local Claude Code authed

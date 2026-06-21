@@ -1,9 +1,15 @@
 name: Ready author guard
 
-# Defense-in-depth for the local-implementer model. `status:ready` is the trigger
-# the local implementer (Claude Code on the maintainer's machine) acts on, and it
-# reads the issue body/criteria — attacker-controllable text — so reaching ready is
-# guarded on BOTH ends:
+# Defense-in-depth for the local-implementer model — NOT a security boundary. This is
+# REACTIVE: it removes a bad `status:ready` after the label event, so there is a TOCTOU
+# window between apply and revert. It cannot *prevent* a label, only correct it, and it
+# can't contain a hijacked local implementer at all. The actual security of the design is
+# containment (least-privilege Zlyzart + the deterministic gates + a separate reviewer);
+# see docs/agent-pipeline.md and .claude/commands/implement-next.md. This guard's job is
+# to keep an HONEST run from ever being handed attacker-authored input, and to keep the
+# board's `status:ready` signal trustworthy in the common case. `status:ready` is the
+# trigger the local implementer acts on, and it reads the issue body/criteria —
+# attacker-controllable text — so reaching ready is guarded on BOTH ends:
 #
 #   (1) trusted AUTHOR  — the issue must be authored by someone with WRITE (push) or
 #       admin access to the repo, read live from the collaborator-permission API. A
