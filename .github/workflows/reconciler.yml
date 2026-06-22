@@ -4,7 +4,7 @@ name: Agent · reconciler
 # limits and dropped events. Runs a few times a day, spends no model tokens itself,
 # and only does cheap bookkeeping:
 #   * status:deferred → status:ready   (re-queues a run that hit the usage limit;
-#                                        the labeled hook re-fires agent-implement)
+#                                        the local implementer routine polls ready)
 #   * stale status:in-progress with no PR → re-queued (a run that died mid-flight)
 #   * nudges the oldest status:unrefined issue + the oldest un-reviewed agent PR
 #   * weekly: opens a quality digest issue so the human keeps Overview (§3)
@@ -42,11 +42,22 @@ jobs:
       - name: Re-queue deferred issues
         run: |
           set -euo pipefail
+          # A GITHUB_TOKEN relabel does NOT re-fire ready-author-guard (GitHub
+          # anti-recursion), so this re-promotion to status:ready would otherwise
+          # bypass the author check. Re-verify author write-access HERE — server-side
+          # CI, not agent-controlled, so it's a real control — to keep the invariant
+          # "status:ready ⇒ write-collaborator author" true on the reconciler path too.
           for n in $(gh issue list --state open --label status:deferred --json number --jq '.[].number'); do
-            echo "Re-queueing deferred #$n"
-            gh issue edit "$n" --remove-label status:deferred --add-label status:ready || true
-            # A GITHUB_TOKEN relabel does NOT fire agent-implement's hook, so dispatch it.
-            gh workflow run agent-implement.yml -f issue="$n" || true
+            author=$(gh issue view "$n" --json author --jq .author.login)
+            ok=$(gh api "repos/$GH_REPO/collaborators/$author/permission" \
+                   --jq '.user.permissions.push // false' 2>/dev/null || echo false)
+            if [ "$ok" = true ]; then
+              echo "Re-queueing deferred #$n (author @$author has write)"
+              gh issue edit "$n" --remove-label status:deferred --add-label status:ready || true
+            else
+              echo "::warning::#$n author @$author lacks write access — not re-promoting; routing to needs-decision."
+              gh issue edit "$n" --remove-label status:deferred --add-label status:needs-decision || true
+            fi
           done
 
       - name: Reclaim stale in-progress claims
@@ -63,10 +74,19 @@ jobs:
             [ "${linked:-0}" -gt 0 ] && { echo "#$n has an open PR — leaving claimed."; continue; }
             age=$(( (now - $(date -u -d "$ts" +%s)) / 3600 ))
             if [ "$age" -ge "$STALE_HOURS" ]; then
-              echo "Reclaiming stale #$n (in-progress ${age}h, no PR)"
-              gh issue edit "$n" --remove-label status:in-progress --add-label status:ready || true
-              # GITHUB_TOKEN relabel won't fire the hook — dispatch implement directly.
-              gh workflow run agent-implement.yml -f issue="$n" || true
+              # Same author re-check as the deferred re-queue: this GITHUB_TOKEN relabel
+              # bypasses ready-author-guard, so verify write-access here before restoring
+              # status:ready. Local /implement-next picks it up on its next pass.
+              author=$(gh issue view "$n" --json author --jq .author.login)
+              ok=$(gh api "repos/$GH_REPO/collaborators/$author/permission" \
+                     --jq '.user.permissions.push // false' 2>/dev/null || echo false)
+              if [ "$ok" = true ]; then
+                echo "Reclaiming stale #$n (in-progress ${age}h, no PR; author @$author has write)"
+                gh issue edit "$n" --remove-label status:in-progress --add-label status:ready || true
+              else
+                echo "::warning::stale #$n author @$author lacks write access — routing to needs-decision."
+                gh issue edit "$n" --remove-label status:in-progress --add-label status:needs-decision || true
+              fi
             fi
           done
 

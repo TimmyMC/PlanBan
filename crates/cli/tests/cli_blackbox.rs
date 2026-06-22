@@ -112,7 +112,7 @@ fn our_push_reconciles_but_external_change_diverges() {
     // Someone else edits the tracker directly (external change to PROJ-44).
     let mut data: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&issues).unwrap()).unwrap();
-    data["issues"][2]["fields"]["status"]["name"] = serde_json::json!("Done");
+    data[2]["fields"]["status"]["name"] = serde_json::json!("Done");
     std::fs::write(&issues, serde_json::to_string_pretty(&data).unwrap()).unwrap();
 
     // Re-sync: only the external change is flagged (Constitution §4).
@@ -408,7 +408,7 @@ fetch = "node tracker.mjs issues.json fetch"
 jql = ""
 
 [tracker.map]
-items = "issues"
+items = "$"
 key = "key"
 summary = "fields.summary"
 status = "fields.status.name"

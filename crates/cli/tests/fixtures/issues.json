@@ -1,7 +1,35 @@
-{
-  "issues": [
-    { "key": "PROJ-12", "fields": { "summary": "Implement tracker sync", "status": { "name": "In Progress" } } },
-    { "key": "PROJ-31", "fields": { "summary": "Review the worktree PR", "status": { "name": "In Review" } } },
-    { "key": "PROJ-44", "fields": { "summary": "Fix flaky integration test", "status": { "name": "In Progress" } } }
-  ]
-}
+[
+  {
+    "key": "PROJ-12",
+    "self": "https://example.atlassian.net/rest/api/3/issue/10012",
+    "fields": {
+      "summary": "Implement tracker sync",
+      "status": {
+        "name": "In Progress",
+        "statusCategory": { "key": "indeterminate", "name": "In Progress" }
+      }
+    }
+  },
+  {
+    "key": "PROJ-31",
+    "self": "https://example.atlassian.net/rest/api/3/issue/10031",
+    "fields": {
+      "summary": "Review the worktree PR",
+      "status": {
+        "name": "In Review",
+        "statusCategory": { "key": "indeterminate", "name": "In Progress" }
+      }
+    }
+  },
+  {
+    "key": "PROJ-44",
+    "self": "https://example.atlassian.net/rest/api/3/issue/10044",
+    "fields": {
+      "summary": "Fix flaky integration test",
+      "status": {
+        "name": "In Progress",
+        "statusCategory": { "key": "indeterminate", "name": "In Progress" }
+      }
+    }
+  }
+]
