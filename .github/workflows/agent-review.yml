@@ -65,10 +65,11 @@ jobs:
             echo "No PR for this event."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
           fi
           labels=$(gh pr view "$PR" --json labels --jq '[.labels[].name] | join(",")')
-          # Only review agent-authored PRs.
+          # Review agent-authored PRs, plus non-agent PRs explicitly routed here via the
+          # `agent-review` label (e.g. a major Dependabot bump — see dependabot-triage.yml).
           case ",$labels," in
-            *",agent-authored,"*) : ;;
-            *) echo "PR #$PR is not agent-authored — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0 ;;
+            *",agent-authored,"*|*",agent-review,"*) : ;;
+            *) echo "PR #$PR is not flagged for agent review — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0 ;;
           esac
           tier=$(printf '%s' "$labels" | tr ',' '\n' | grep '^complexity:' | head -1 || true)
           case "$tier" in

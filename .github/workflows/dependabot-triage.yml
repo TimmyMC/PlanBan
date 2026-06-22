@@ -1,0 +1,74 @@
+name: Dependabot triage
+
+# Risk-tier Dependabot PRs so the strict trunk ruleset (requires 1 approving review,
+# no bypass) stops stranding them:
+#   * patch / minor bump → low risk → auto-approve, satisfying the review requirement.
+#     `automerge.yml` already treats Dependabot as eligible-on-green, so it then merges
+#     with no human (once the PR is current — staleness is the auto-update sweep's job).
+#   * major bump → higher risk → route into the existing tier+1 agent-review path by
+#     labelling `agent-review` + `complexity:sonnet`. `agent-review.yml` then reviews it
+#     as the installed claude[bot] App (one tier up = Opus) on CI-complete and, on pass,
+#     approves → auto-merges; on issues it requests changes for a human.
+#
+# `pull_request_target`, not `pull_request`: a Dependabot PR's `pull_request` run executes
+# in GitHub's secret-isolated, read-only context, so it can't approve or label. The
+# `_target` variant runs in the BASE (trunk) context with a write token. This is safe here
+# because we NEVER check out or execute PR code — we only read Dependabot's own metadata
+# and call `gh` against the API (same rationale as label-guard.yml).
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dependabot-triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Approve patch/minor, route majors to agent review
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the dependency update metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          # The PR is in this repo (Dependabot branches are not forks), so the default
+          # token can read the PR. No alert lookup is needed.
+          github-token: ${{ github.token }}
+
+      - name: Triage by semver bump level
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          # For a GROUPED update (e.g. the rust-deps group), this is the HIGHEST bump in
+          # the group — so a group containing any major routes to review. Conservative.
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+        run: |
+          set -euo pipefail
+          echo "PR #$PR update-type: ${UPDATE_TYPE:-<none>}"
+
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor)
+              # Approve so the ruleset's 1-review requirement is met; automerge.yml lands
+              # it on green. (Re-runs on `synchronize`, so a rebase that dismisses the
+              # stale approval is followed by a fresh one.)
+              gh pr review "$PR" --approve \
+                --body "Auto-approved: ${UPDATE_TYPE#version-update:semver-} dependency bump. Merges once CI is green; a major bump would instead be routed to agent review."
+              echo "Approved patch/minor PR #$PR."
+              ;;
+            version-update:semver-major)
+              # Route into the tier+1 agent-review pipeline (see agent-review.yml).
+              gh pr edit "$PR" --add-label agent-review --add-label complexity:sonnet
+              echo "Routed major PR #$PR to agent review (agent-review + complexity:sonnet)."
+              ;;
+            *)
+              echo "Unknown/empty update-type — leaving PR #$PR for a human."
+              ;;
+          esac
