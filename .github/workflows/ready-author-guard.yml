@@ -1,0 +1,107 @@
+name: Ready author guard
+
+# Defense-in-depth for the local-implementer model — NOT a security boundary. This is
+# REACTIVE: it removes a bad `status:ready` after the label event, so there is a TOCTOU
+# window between apply and revert. It cannot *prevent* a label, only correct it, and it
+# can't contain a hijacked local implementer at all. The actual security of the design is
+# containment (least-privilege Zlyzart + the deterministic gates + a separate reviewer);
+# see docs/agent-pipeline.md and .claude/commands/implement-next.md. This guard's job is
+# to keep an HONEST run from ever being handed attacker-authored input, and to keep the
+# board's `status:ready` signal trustworthy in the common case. `status:ready` is the
+# trigger the local implementer acts on, and it reads the issue body/criteria —
+# attacker-controllable text — so reaching ready is guarded on BOTH ends:
+#
+#   (1) trusted AUTHOR  — the issue must be authored by someone with WRITE (push) or
+#       admin access to the repo, read live from the collaborator-permission API. A
+#       read-only / outside (pull-only) collaborator is NOT trusted: their issue text
+#       feeds the local agent, so the bar is write, not "any collaborator." Stops a
+#       third party getting auto-implemented by filing an issue and waiting for a
+#       stray label.
+#   (2) admin PROMOTER  — `status:ready` must be applied BY A REPO ADMIN (the human
+#       go-decision), also read live from the API — no hardcoded owner list to keep in
+#       sync. Stops a hijacked bot (an injected local Zlyzart session — itself a
+#       write collaborator) from self-authoring an issue and self-promoting it to ready.
+#
+# Both checks fail CLOSED: if the permission API can't be reached the label is revoked.
+# If either fails, `status:ready` is stripped and the issue goes to
+# `status:needs-decision`. A relabel by the reconciler's GITHUB_TOKEN does NOT fire
+# this event (GitHub anti-recursion), so this guard only ever judges human/PAT-applied
+# promotions. That is NOT a free pass for the reconciler path: reconciler.yml re-runs
+# the author write-access check itself before any deferred/stale → ready re-promotion,
+# so "status:ready ⇒ write-collaborator author" holds on every path, not just this one.
+# (The admin-promoter check is this event's job; a reconciler re-queue after a transient
+# failure is not a fresh go-decision, so it re-verifies authorship only.)
+#
+# Always-on, independent of AGENTS_ENABLED. Belt-and-suspenders: the /implement-next
+# routine ALSO restricts to write-collaborator-authored issues. The owner identity is
+# the repo's admins (fetched live) — no list to mirror; ci-complete.yml gates the same
+# trust boundary via CODEOWNERS review, and label-guard.yml still uses a static OWNERS
+# list for its cheaper label check.
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: ready-author-guard-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Enforce write-collaborator author + admin promotion on status:ready
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'status:ready'
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      N: ${{ github.event.issue.number }}
+      AUTHOR: ${{ github.event.issue.user.login }}
+      SENDER: ${{ github.event.sender.login }}
+    steps:
+      - name: Revoke status:ready unless a write collaborator authored it AND an admin promoted it
+        run: |
+          set -uo pipefail
+
+          # Live permission lookup via the collaborator-permission API — authoritative
+          # and current (a revoked collaborator loses trust immediately). Echoes the
+          # requested boolean from .user.permissions, or "false" on ANY failure so the
+          # checks below fail closed. .permissions.push is true for write/maintain/admin;
+          # .permissions.admin is true only for repo admins (the owners).
+          perm() { # perm <login> <push|admin>
+            gh api "repos/$GH_REPO/collaborators/$1/permission" \
+              --jq ".user.permissions.$2 // false" 2>/dev/null || echo false
+          }
+
+          # (1) Author must have write (push) access — read-only collaborators excluded.
+          author_ok=$(perm "$AUTHOR" push)
+
+          # (2) status:ready must be applied by a repo admin (the human go-decision).
+          owner_ok=$(perm "$SENDER" admin)
+
+          if [ "$author_ok" = true ] && [ "$owner_ok" = true ]; then
+            echo "#$N: write collaborator @$AUTHOR, promoted by admin @$SENDER — leaving status:ready."
+            exit 0
+          fi
+
+          reason=""
+          [ "$author_ok" = true ] || reason="author @$AUTHOR does not have write access to the repo"
+          if [ "$owner_ok" != true ]; then
+            [ -n "$reason" ] && reason="$reason; "
+            reason="${reason}status:ready was applied by @$SENDER, not a repo admin"
+          fi
+          echo "::warning::#$N: revoking status:ready — $reason."
+          gh issue edit "$N" --remove-label status:ready --add-label status:needs-decision
+
+          # Comment once per issue (dedup on a marker, like label-guard.yml).
+          MARKER="<!-- ready-author-guard -->"
+          existing=$(gh api "repos/$GH_REPO/issues/$N/comments" \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" 2>/dev/null | head -1 || true)
+          if [ -z "$existing" ]; then
+            gh issue comment "$N" --body "$MARKER
+          🔒 Revoked \`status:ready\` — $reason.
+
+          Auto-implementation requires an issue **authored by a write collaborator** **and** promoted to \`status:ready\` **by a repo admin** — the human go-decision a compromised bot can't forge. Moved to \`status:needs-decision\`; an admin can re-apply \`status:ready\` to proceed. (See docs/agent-pipeline.md → *Local implementer mode*.)"
+          fi

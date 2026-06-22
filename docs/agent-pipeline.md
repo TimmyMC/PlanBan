@@ -12,9 +12,9 @@ issue opened ─► issue-triage adds status:unrefined ─►(hook) agent-refine
    ├─ clear      → proposed complexity:<tier> + acceptance-criteria + status:refined
    │                 └─► HUMAN reviews, applies status:ready (the go decision)
    └─ ambiguous  → questions + status:needs-decision ─► HUMAN answers ─► requeue
-status:ready ─►(hook) agent-implement (model = tier)  → claims status:in-progress
-   └─ draft PR (agent-authored, complexity:<tier>) → CI runs
-PR ─►(hook) agent-review (reviewer = tier+1)
+status:ready ─►(local) /implement-next picks a TRUSTED-authored ready issue → claims status:in-progress
+   └─ draft PR (agent-authored, complexity:<tier>) opened as Zlyzart → CI runs
+PR ─►(hook) agent-review (installed App, reviewer = tier+1)
    ├─ pass (haiku/sonnet) → approve + mark ready → auto-merge
    ├─ issues              → request changes (stays draft) → implementer loop
    └─ opus PR             → reviewer comments; a HUMAN gives the final approval
@@ -45,8 +45,9 @@ to" is never a control.
 | Principal | May do | Its approvals/merges are bounded by |
 | --- | --- | --- |
 | **Owner** (human, browser, 2FA) | clear gate changes; final-approve opus PRs; merge anything | — must never be an agent's credential |
-| **Implementer bot** | branch, push, open draft PRs, comment, non-protected labels | *can* submit reviews (PR-write includes that), but its approval is **inert**: not an `OWNERS` login (can't clear a gate), not in `REVIEWER_LOGINS` (can't trigger auto-merge), and GitHub blocks self-approval. Cannot push to trunk or merge. |
-| **Reviewer bot** | submit reviews, approve → auto-merge *ordinary* PRs | cannot clear a gate change (not an `OWNERS` login) or approve its own work |
+| **Implementer** (local Claude Code authed as the **Zlyzart** bot) | branch, push, open draft PRs, comment, non-protected labels | *can* submit reviews (PR-write includes that), but its approval is **inert**: not an `OWNERS` login (can't clear a gate), not in `REVIEWER_LOGINS` (can't trigger auto-merge), and GitHub blocks self-approval. Cannot push to trunk or merge. |
+| **Reviewer** (the installed Claude **GitHub App**) | submit reviews, approve → auto-merge *ordinary* PRs | cannot clear a gate change (not an `OWNERS` login) or approve its own work |
+| **Refiner** (CI Claude via `agent-refine`, runs on **untrusted** issue text) | comment on issues, set non-protected labels, read the repo | runs as the Actions `GITHUB_TOKEN` (can't approve PRs or trigger downstream workflows) with `contents: read` (no code write) and tools `Bash(gh:*),Read,Grep,Glob` (no merge). It processes **any** public author's issue body, so it is the pipeline's prompt-injection **front door** — bounded to issue/label bookkeeping on an ephemeral runner. |
 | **CI `GITHUB_TOKEN`** | run checks, read | cannot approve PRs at all (GitHub blocks the Actions token), nor trigger further workflows |
 
 > **There is no GitHub permission for "open a PR but never approve."** Reviews live under the same
@@ -55,8 +56,8 @@ to" is never a control.
 > `REVIEWER_LOGINS` for merge) plus GitHub's self-approval block — **never** by assuming the token
 > lacks the verb. Two corollaries: (a) require branch-protection approvals from **CODEOWNERS / a
 > specific reviewer**, not "any 1 review," so a stray bot approval can't satisfy the merge rule; and
-> (b) the reviewer must be a real bot PAT/App token, because the Actions `GITHUB_TOKEN` is forbidden
-> from approving at all.
+> (b) the reviewer must be a real bot identity — a **GitHub App** (PATs are unsupported here) —
+> because the Actions `GITHUB_TOKEN` is forbidden from approving at all.
 
 **The injection-resistant floor.** The deterministic gates do not trust agent intent: a hijacked
 agent still cannot make a failing test pass, cannot strip `-D warnings`/a coverage floor without
@@ -79,6 +80,18 @@ rides on top of these gates and can never relax them.
    approval from someone other than the last pusher, and dismiss stale approvals.
 
 **Residual risks (named, not hand-waved):**
+- **Untrusted input reaches the refiner — non-collaborators are NOT walled off from the agents.**
+  This is a public repo: anyone can open an issue, and `issue-triage.yml` auto-labels every new one
+  `status:unrefined`, which feeds `agent-refine` — an LLM run over the **raw, attacker-controllable
+  body**. Labels gate the *implementer* (only collaborators can apply `status:*`), but they do not
+  gate the *refiner*; its protection is **containment, not exclusion**. *Contained*: refine holds
+  only the Actions `GITHUB_TOKEN` (`contents: read` + `issues: write`; tools `Bash(gh:*),Read,Grep,
+  Glob`) — ephemeral runner, no code-write, no merge, can't approve or trigger downstream workflows.
+  An injected refiner *could* shuffle labels, including self-applying `status:ready` to the
+  attacker's own issue — but as a `GITHUB_TOKEN` edit that does **not** fire `ready-author-guard`,
+  and the downstream author checks (the implementer's consume-time selector + the reconciler's
+  author re-check, both requiring write access) reject the non-collaborator author, with the
+  least-privilege/​gate floor bounding whatever slips. Worst case is issue/label noise, not code.
 - An injected **reviewer** could approve a PR crafted to inject it → that PR auto-merges. *Contained*:
   the code still passed every deterministic gate, and gate changes / opus PRs still require a human.
   Worst case is "fully-gate-passing malicious code merges," a bounded blast radius — not arbitrary.
@@ -97,24 +110,55 @@ quality digest. After `ATTEMPT_CAP` (3) failures an issue goes to `status:needs-
 
 ## Setup (owner, one-time)
 
-The pipeline is **inert until enabled** — merging it changes nothing until you:
+The pipeline is **inert until enabled** — merging it changes nothing until you set the secrets
+and variables. This repo runs the **local implementer mode** (below) by default; the all-CI
+two-bot setup is the opt-in fallback.
 
-1. **Identities** — create two GitHub identities distinct from your own (GitHub App
-   installations or bot accounts), one implementer and one reviewer. They must be different so
-   the reviewer's approval is a real second-party review (GitHub blocks self-approval) and so an
-   agent approval can be told apart from the owner's.
+### Local implementer mode (default)
+
+Implementation runs **locally** — Claude Code on the maintainer's machine, authed as the
+least-privilege **Zlyzart** bot — driven by the `/implement-next` routine
+(`.claude/commands/implement-next.md`). Only **review** runs in CI, as the installed Claude
+**GitHub App**. Two distinct identities (Zlyzart ≠ the App) keep the second-party-review invariant.
+
+*Why this shape:* a CI implementer is an ephemeral, repo-scoped token in a throwaway runner;
+a local implementer is a credential on a real machine, so a prompt-injected run could reach the
+whole box. We accept that **only** because of **containment**, the two boundaries a hijacked run can't
+cross: (a) the implementer identity is least-privilege (Zlyzart: Write, not `OWNERS`/CODEOWNERS
+— its approvals are inert, it can't merge or clear a gate), and (b) the deterministic gates are
+unchanged. The author controls — `ready-author-guard.yml` (write-collaborator-authored AND
+admin-promoted) and the reconciler's author re-check — are **defense-in-depth, not part of that
+acceptance**: the guard is *reactive* (it strips a bad `status:ready` after the fact, so there's
+a TOCTOU window) and the `/implement-next` selector that re-checks at consume-time lives in a
+prompt, so neither can contain a hijacked run. Their value is keeping an *honest* run from being
+handed attacker-authored input. For unattended runs, run the local implementer in an **isolated
+environment** (container/VM/dedicated OS user), never your daily login — Zlyzart bounds the
+*GitHub* authority but not the *machine*.
+
+1. **Identities** — install the Claude **GitHub App** on the repo (e.g. via `/install-github-app`)
+   with **Pull requests: Read & Write** so it can approve. Run interactive/local Claude Code authed
+   as **Zlyzart**, never the owner. The two must differ (the App ≠ Zlyzart) so the App's approval is
+   a genuine second-party review.
 2. **Secrets** (Settings → Secrets and variables → Actions → Secrets):
-   - `CLAUDE_CODE_OAUTH_TOKEN` — Claude subscription token for `claude-code-action`.
-   - `IMPLEMENTER_TOKEN` — PAT/App token for the implementer identity. **Must not be the default
-     `GITHUB_TOKEN`** — a PR opened with `GITHUB_TOKEN` does not trigger CI.
-   - `REVIEWER_TOKEN` — PAT/App token for the reviewer identity.
+   - `CLAUDE_CODE_OAUTH_TOKEN` — Claude subscription token for `claude-code-action` (used by review
+     + refine). *No `IMPLEMENTER_TOKEN`/`REVIEWER_TOKEN` needed in this mode* — the reviewer auths as
+     the installed App (omit `github_token`), and the implementer is your local `gh`/git (Zlyzart).
 3. **Variables** (same screen → Variables):
-   - `REVIEWER_LOGINS` — space-separated login(s) of the reviewer identity; auto-merge only
-     accepts an agent PR approved by one of these (or an owner). Unset ⇒ agent PRs wait for a human.
-   - `AGENTS_ENABLED` — set to `true` to turn the pipeline on. Leave unset/false to pause it.
+   - `REVIEWER_LOGINS` — the App's `<app-name>[bot]` login (e.g. `claude[bot]`); auto-merge only
+     honors an agent PR approved by one of these (or an owner). Unset ⇒ agent PRs wait for a human.
+   - `AGENTS_ENABLED` — `true` turns review/refine/reconciler on. Leave unset/false to pause.
 4. **Owner allowlist** — the logins permitted to clear a gate change live in the `OWNERS` env of
    `ci-complete.yml` (gate-integrity) and `label-guard.yml`, default `TimmyMC`. Update if owners
    change.
+
+The **author allowlist needs no config**: `ready-author-guard.yml` only lets an issue hold
+`status:ready` when it is **authored by a write collaborator** **and** was **promoted to ready
+by a repo admin** (the human go-decision) — both read live from the collaborator-permission API
+(no hardcoded list; manage trust via Settings → Collaborators). Otherwise it strips
+`status:ready` → `status:needs-decision`. The admin-promoter check stops a hijacked bot (itself a
+write collaborator) from self-authoring + self-promoting an issue. `/implement-next` likewise
+selects only write-collaborator-authored issues and re-queues failures to `status:deferred`
+(never `status:ready`) so the reconciler re-promotes.
 
 ## Labels
 
