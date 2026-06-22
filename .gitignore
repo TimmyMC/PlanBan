@@ -25,6 +25,10 @@ debug
 # Local config overrides
 clabby.local.toml
 
+# Local-only, prod-like tracker data (raw acli/jira exports). Keep prod data
+# out of the repo; only the derived, synthetic *.json examples are committed.
+*.local.json
+
 # Personal Claude Code settings (the committed .claude/settings.json is shared)
 .claude/settings.local.json
 
