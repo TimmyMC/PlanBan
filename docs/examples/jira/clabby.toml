@@ -15,9 +15,11 @@ fetch = "node ../tracker.mjs issues.json fetch"
 push  = "node ../tracker.mjs issues.json transition {{ key }} \"{{ status }}\""
 jql   = "assignee = currentUser() AND statusCategory != Done"
 
-# How to read issues out of the fetch JSON (Jira's nested shape).
+# How to read issues out of the fetch JSON. Real `acli` returns a BARE top-level
+# array (the JSON root IS the list) with Jira's nested `fields` — this map mirrors
+# that shape, so the example exercises the real tracker structure.
 [tracker.map]
-items    = "issues"
+items    = "$"
 key      = "key"
 summary  = "fields.summary"
 status   = "fields.status.name"

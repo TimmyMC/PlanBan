@@ -9,7 +9,7 @@ push  = "node tracker.mjs issues.json transition {{ key }} \"{{ status }}\""
 jql   = ""
 
 [tracker.map]
-items   = "issues"
+items   = "$"
 key     = "key"
 summary = "fields.summary"
 status  = "fields.status.name"
