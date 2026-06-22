@@ -119,4 +119,6 @@ jobs:
           fi
 
           echo "PR #$pr eligible (CI green, approval/author OK) — squash-merging."
-          gh pr merge "$pr" --squash --delete-branch
+          # --auto lets GitHub queue the merge through the branch-protection ruleset
+          # rather than attempting an immediate merge that the ruleset may reject.
+          gh pr merge "$pr" --squash --delete-branch --auto
