@@ -103,12 +103,13 @@
   description: "Security vulnerability or hardening."
 
 # ── Pipeline mechanics (on PRs) ─────────────────────────────────────────────────
-- name: "agent-authored"
-  color: "0052cc"
-  description: "PR opened by an implementer agent; routes tier+1 review + auto-merge."
 - name: "agent-review"
-  color: "1f6feb"
-  description: "Route a non-agent PR (e.g. a major dependency bump) into the tier+1 agent review + auto-merge path."
+  color: "0052cc"
+  # Renamed from `agent-authored`; the alias makes label-sync migrate the existing
+  # label (and its PR assignments) instead of deleting it.
+  description: "Routes a PR through the tier+1 agent review + auto-merge path — applied by the implementer to its own PRs, or by triage to a routed PR (e.g. a major dependency bump)."
+  aliases:
+    - "agent-authored"
 - name: "review:passed"
   color: "2e7d32"
   description: "Tier+1 reviewer approved (mirrors the GitHub review state)."

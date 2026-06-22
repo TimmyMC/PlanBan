@@ -1,7 +1,7 @@
 name: Auto-merge
 
 # Trunk-based development: a PR into `trunk` merges itself once all checks pass
-# (and, for agent-authored PRs, once a higher-tier reviewer or an owner approves).
+# (and, for `agent-review`-flagged PRs, once a higher-tier reviewer or an owner approves).
 #
 # Two triggers, one decision:
 #   * workflow_run (CI complete success) — the original path. Gating here means
@@ -15,7 +15,7 @@ name: Auto-merge
 #
 # Author/approval rule:
 #   * owner- or Dependabot-authored PR  → CI green is enough (unchanged).
-#   * `agent-authored` PR               → also needs an APPROVED review from a
+#   * `agent-review`-flagged PR         → also needs an APPROVED review from a
 #     tier+1 reviewer identity (repo var REVIEWER_LOGINS) or an owner. An agent
 #     can't self-approve (distinct identity + GitHub blocks self-approval), and an
 #     agent approval can NEVER clear a gate change — that still needs an owner
@@ -55,7 +55,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
           # Space-separated reviewer-bot logins whose approval can merge an
-          # agent-authored PR. Unset ⇒ agent PRs wait for a human (safe default).
+          # `agent-review`-flagged PR. Unset ⇒ those PRs wait for a human (safe default).
           REVIEWER_LOGINS: ${{ vars.REVIEWER_LOGINS }}
           EVENT: ${{ github.event_name }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -101,7 +101,7 @@ jobs:
             eligible=true
           fi
           case ",$labels," in
-            *",agent-authored,"*)
+            *",agent-review,"*)
               # Latest review state per login; approval must be from a reviewer-bot or owner.
               declare -A last
               while IFS=$'\t' read -r login state; do

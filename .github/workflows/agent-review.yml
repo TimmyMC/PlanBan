@@ -1,6 +1,6 @@
 name: Agent · review
 
-# Stage 3: reviews an agent-authored PR with a model ONE TIER ABOVE the PR's
+# Stage 3: reviews an `agent-review`-flagged PR with a model ONE TIER ABOVE the PR's
 # complexity (haiku→Sonnet, sonnet→Opus, opus→Opus + a human). The reviewer runs
 # as the installed Claude GitHub App — a DIFFERENT identity from the local
 # implementer (Claude Code authed as the Zlyzart bot) — so:
@@ -65,10 +65,10 @@ jobs:
             echo "No PR for this event."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
           fi
           labels=$(gh pr view "$PR" --json labels --jq '[.labels[].name] | join(",")')
-          # Review agent-authored PRs, plus non-agent PRs explicitly routed here via the
-          # `agent-review` label (e.g. a major Dependabot bump — see dependabot-triage.yml).
+          # Review any PR flagged `agent-review` — an implementer's own PR, or a non-agent
+          # PR routed here by triage (e.g. a major Dependabot bump — see dependabot-triage.yml).
           case ",$labels," in
-            *",agent-authored,"*|*",agent-review,"*) : ;;
+            *",agent-review,"*) : ;;
             *) echo "PR #$PR is not flagged for agent review — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0 ;;
           esac
           tier=$(printf '%s' "$labels" | tr ',' '\n' | grep '^complexity:' | head -1 || true)
