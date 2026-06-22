@@ -6,7 +6,7 @@
 #
 #   Path changed                          | Lint&test | Coverage | Frontend | Desktop | Gate integrity
 #   --------------------------------------|-----------|----------|----------|---------|---------------
-#   crates/**, Cargo.*, diesel.toml       |    run    |   run    |    -     |    -    |     run
+#   crates/**, Cargo.*, diesel.toml       |    run    |   run    |    -     |   run   |     run
 #   rust-toolchain.toml                   |    run    |   run    |    -     |   run   |     run
 #   ui/**                                 |    -      |    -     |   run    |   run   |     run
 #   src-tauri/**                          |    -      |    -     |    -     |   run   |     run
@@ -44,12 +44,15 @@ frontend: &frontend
   - 'ui/**'
   - *ci
 
-# The Tauri shell is a separate crate outside the workspace. It embeds ui/dist at compile
-# time (so it depends on the frontend) and compiles with the same pinned toolchain.
+# The Tauri shell is a separate crate outside the workspace, but it depends on clabby-core
+# (a path dep) AND embeds ui/dist at compile time — so a change to the Rust crates or the
+# frontend can break its compile/tests. Run it on `*rust` (crates/**, Cargo.*, toolchain)
+# and `*frontend`, not just `src-tauri/**`, so core/UI drift can't ship a broken shell
+# untested. (`*rust` already includes `*toolchain` and `*ci`.)
 desktop:
   - 'src-tauri/**'
+  - *rust
   - *frontend
-  - *toolchain
 
 # Gate-integrity must run whenever any gate-relevant file changes. Built from the anchors
 # above plus the non-build paths, so adding a path to `rust`/`frontend` updates this too.
