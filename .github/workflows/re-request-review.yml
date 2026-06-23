@@ -1,0 +1,56 @@
+name: Re-request dismissed reviews
+
+# When a push to a PR branch dismisses an owner's review (the gate-change
+# scenario), automatically re-request it. This way the owner gets a GitHub
+# notification instead of the PR silently stalling with no indication needed.
+#
+# Security: only re-requests from the same OWNERS allowlist that gate-integrity
+# uses to clear a gate change. Re-requesting a review is not an approval —
+# the owner still has to submit a real APPROVED review to clear gate-integrity.
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  re-request:
+    name: Re-request dismissed owner reviews
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-request if owner review was dismissed by this push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          # Keep in sync with the OWNERS list in ci-complete.yml's gate-integrity job.
+          OWNERS: "TimmyMC"
+        run: |
+          set -euo pipefail
+
+          # Build map of each owner's latest non-comment review state.
+          declare -A last
+          while IFS=$'\t' read -r login state; do
+            case "$state" in
+              APPROVED|CHANGES_REQUESTED|DISMISSED) last["$login"]="$state" ;;
+            esac
+          done < <(gh api --paginate "repos/$REPO/pulls/$PR/reviews" \
+                     --jq '.[] | [.user.login, .state] | @tsv')
+
+          # Already-pending reviewers (avoid duplicate request).
+          pending=$(gh api "repos/$REPO/pulls/$PR" \
+                      --jq '[.requested_reviewers[].login] | join(" ")')
+
+          for owner in $OWNERS; do
+            if [ "${last[$owner]:-}" = "DISMISSED" ]; then
+              if printf '%s' " $pending " | grep -qw "$owner"; then
+                echo "$owner already in requested reviewers — skip."
+              else
+                echo "Re-requesting review from $owner (dismissed by push)."
+                gh api "repos/$REPO/pulls/$PR/requested_reviewers" \
+                  -X POST --field "reviewers[]=$owner"
+              fi
+            fi
+          done

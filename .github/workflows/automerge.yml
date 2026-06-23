@@ -13,13 +13,20 @@ name: Auto-merge
 # Either way the merge step re-verifies: not draft, no `do-not-merge`, CI complete
 # is green, and the author/approval rule below is satisfied.
 #
+# Cascade: after queuing a merge, this workflow dispatches auto-update-prs.yml via
+# workflow_dispatch so remaining behind PRs get swept. The normal `push` trigger on
+# auto-update never fires — GitHub's recursion guard blocks push events from
+# GITHUB_TOKEN merges — but workflow_dispatch is exempt from that guard.
+#
 # Author/approval rule:
 #   * owner- or Dependabot-authored PR  → CI green is enough (unchanged).
 #   * `agent-review`-flagged PR         → also needs an APPROVED review from a
-#     tier+1 reviewer identity (repo var REVIEWER_LOGINS) or an owner. An agent
-#     can't self-approve (distinct identity + GitHub blocks self-approval), and an
-#     agent approval can NEVER clear a gate change — that still needs an owner
-#     review, enforced separately in ci-complete.yml's gate-integrity job.
+#     tier+1 reviewer identity (repo var REVIEWER_LOGINS) or an owner. Triggered
+#     by either the `agent-review` label OR the PR author appearing in the
+#     IMPLEMENT_AUTHORS repo var — no manual label required for bot-opened PRs.
+#     An agent can't self-approve (distinct identity + GitHub blocks self-approval),
+#     and an agent approval can NEVER clear a gate change — that still needs an
+#     owner review, enforced separately in ci-complete.yml's gate-integrity job.
 
 on:
   workflow_run:
@@ -31,6 +38,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   merge:
@@ -57,6 +65,10 @@ jobs:
           # Space-separated reviewer-bot logins whose approval can merge an
           # `agent-review`-flagged PR. Unset ⇒ those PRs wait for a human (safe default).
           REVIEWER_LOGINS: ${{ vars.REVIEWER_LOGINS }}
+          # Space-separated implementer logins (same list as implement-next uses).
+          # PRs authored by these accounts need owner/reviewer approval automatically
+          # — no manual agent-review label required.
+          IMPLEMENT_AUTHORS: ${{ vars.IMPLEMENT_AUTHORS }}
           EVENT: ${{ github.event_name }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           REVIEW_PR: ${{ github.event.pull_request.number }}
@@ -100,19 +112,25 @@ jobs:
           if [ "$author" = "$OWNER" ] || printf '%s' "$lower" | grep -q dependabot; then
             eligible=true
           fi
-          case ",$labels," in
-            *",agent-review,"*)
-              # Latest review state per login; approval must be from a reviewer-bot or owner.
-              declare -A last
-              while IFS=$'\t' read -r login state; do
-                case "$state" in APPROVED|CHANGES_REQUESTED|DISMISSED) last["$login"]="$state" ;; esac
-              done < <(gh api --paginate "repos/$GH_REPO/pulls/$pr/reviews" \
-                         --jq '.[] | [.user.login, .state] | @tsv')
-              for who in $REVIEWER_LOGINS "$OWNER"; do
-                [ "${last[$who]:-}" = "APPROVED" ] && eligible=true
-              done
-              ;;
-          esac
+
+          # agent-review label OR author in IMPLEMENT_AUTHORS → needs an approval.
+          needs_approval=false
+          case ",$labels," in *",agent-review,"*) needs_approval=true ;; esac
+          for ia in ${IMPLEMENT_AUTHORS:-}; do
+            [ "$author" = "$ia" ] && needs_approval=true && break
+          done
+
+          if [ "$needs_approval" = "true" ]; then
+            # Latest review state per login; approval must be from a reviewer-bot or owner.
+            declare -A last
+            while IFS=$'\t' read -r login state; do
+              case "$state" in APPROVED|CHANGES_REQUESTED|DISMISSED) last["$login"]="$state" ;; esac
+            done < <(gh api --paginate "repos/$GH_REPO/pulls/$pr/reviews" \
+                       --jq '.[] | [.user.login, .state] | @tsv')
+            for who in $REVIEWER_LOGINS "$OWNER"; do
+              [ "${last[$who]:-}" = "APPROVED" ] && eligible=true
+            done
+          fi
 
           if [ "$eligible" != "true" ]; then
             echo "PR #$pr not yet eligible (needs a tier+1 reviewer or owner approval)."; exit 0
@@ -122,3 +140,10 @@ jobs:
           # --auto lets GitHub queue the merge through the branch-protection ruleset
           # rather than attempting an immediate merge that the ruleset may reject.
           gh pr merge "$pr" --squash --delete-branch --auto
+
+          # Kick off the auto-update sweep for remaining open PRs. The normal push
+          # trigger on auto-update-prs.yml never fires because GitHub's recursion
+          # guard blocks push events when GITHUB_TOKEN does the squash merge.
+          # workflow_dispatch is exempt from that guard and does fire.
+          gh workflow run auto-update-prs.yml --repo "$GH_REPO" --ref trunk \
+            || echo "::warning::cascade dispatch failed — sweep must be triggered manually"
