@@ -103,7 +103,7 @@ jobs:
       - name: Nudge the oldest un-reviewed agent PR
         run: |
           set -euo pipefail
-          pr=$(gh pr list --state open --label agent-authored \
+          pr=$(gh pr list --state open --label agent-review \
                  --json number,labels,createdAt --jq '
                    map(select([.labels[].name] | (index("review:passed") or index("review:changes-requested")) | not))
                    | sort_by(.createdAt) | .[0].number // empty')
@@ -119,7 +119,7 @@ jobs:
           set -euo pipefail
           [ "$(date -u +%u)" = "1" ] && [ "$(date -u +%H)" -lt 6 ] || { echo "Not the weekly window."; exit 0; }
           since=$(date -u -d '7 days ago' +%Y-%m-%d)
-          merged=$(gh pr list --state merged --label agent-authored --search "merged:>=$since" \
+          merged=$(gh pr list --state merged --label agent-review --search "merged:>=$since" \
                      --json number,title --jq '[.[] | "- #\(.number) \(.title)"] | join("\n")' || true)
           counts=""
           for s in unrefined refined ready in-progress needs-decision deferred; do
