@@ -19,13 +19,17 @@ name: Dependabot triage
 on:
   pull_request_target:
     types: [opened, reopened, synchronize]
+  # Manual backfill: run after deploying this workflow so existing open Dependabot
+  # PRs that pre-date the workflow get triaged (they missed the `opened` event and
+  # the auto-update sweep skips BLOCKED PRs, so they'd never get a synchronize either).
+  workflow_dispatch: {}
 
 permissions:
   contents: read
   pull-requests: write
 
 concurrency:
-  group: dependabot-triage-${{ github.event.pull_request.number }}
+  group: dependabot-triage-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -72,3 +76,61 @@ jobs:
               echo "Unknown/empty update-type — leaving PR #$PR for a human."
               ;;
           esac
+
+  backfill:
+    name: Backfill existing open Dependabot PRs
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Triage open PRs that pre-date this workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          gh pr list --repo "$GH_REPO" --author "dependabot[bot]" --state open \
+            --limit 100 --json number,title,labels \
+            --jq '.[] | [(.number | tostring), .title, ([.labels[].name] | join(","))] | join("\t")' \
+          | while IFS=$'\t' read -r pr title labels; do
+              # Skip already-triaged PRs
+              case ",$labels," in
+                *",agent-review,"*) echo "PR #$pr: already has agent-review — skip."; continue ;;
+              esac
+              approved=$(gh api "repos/$GH_REPO/pulls/$pr/reviews" \
+                --jq '[.[] | select(.user.login == "github-actions[bot]" and .state == "APPROVED")] | length')
+              [ "$approved" -gt 0 ] && { echo "PR #$pr: already approved — skip."; continue; }
+
+              # Parse "from X to Y" from Dependabot's standard title format.
+              from=$(echo "$title" | grep -oP 'from \K[0-9]+\.[0-9]+' | head -1 || true)
+              to=$(echo "$title"   | grep -oP ' to \K[0-9]+\.[0-9]+'  | head -1 || true)
+              if [ -z "$from" ] || [ -z "$to" ]; then
+                echo "PR #$pr: can't parse version from title — leaving for human."; continue
+              fi
+
+              from_major=$(echo "$from" | cut -d. -f1)
+              to_major=$(echo "$to"     | cut -d. -f1)
+              from_minor=$(echo "$from" | cut -d. -f2)
+              to_minor=$(echo "$to"     | cut -d. -f2)
+
+              if [ "$to_major" -gt "$from_major" ]; then
+                bump=major
+              elif [ "$to_minor" -gt "$from_minor" ]; then
+                bump=minor
+              else
+                bump=patch
+              fi
+
+              echo "PR #$pr ($bump): $title"
+              case "$bump" in
+                patch|minor)
+                  gh pr review "$pr" --approve \
+                    --body "Auto-approved (backfill): $bump dependency bump. Merges once CI is green; a major bump would instead be routed to agent review."
+                  echo "Approved PR #$pr."
+                  ;;
+                major)
+                  gh pr edit "$pr" --add-label agent-review --add-label complexity:sonnet
+                  echo "Routed major PR #$pr to agent review."
+                  ;;
+              esac
+            done
