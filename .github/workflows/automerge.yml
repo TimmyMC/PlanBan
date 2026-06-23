@@ -38,6 +38,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   merge:
@@ -144,4 +145,5 @@ jobs:
           # trigger on auto-update-prs.yml never fires because GitHub's recursion
           # guard blocks push events when GITHUB_TOKEN does the squash merge.
           # workflow_dispatch is exempt from that guard and does fire.
-          gh workflow run auto-update-prs.yml --repo "$GH_REPO" --ref trunk || true
+          gh workflow run auto-update-prs.yml --repo "$GH_REPO" --ref trunk \
+            || echo "::warning::cascade dispatch failed — sweep must be triggered manually"
