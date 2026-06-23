@@ -13,6 +13,11 @@ name: Auto-merge
 # Either way the merge step re-verifies: not draft, no `do-not-merge`, CI complete
 # is green, and the author/approval rule below is satisfied.
 #
+# Cascade: after queuing a merge, this workflow dispatches auto-update-prs.yml via
+# workflow_dispatch so remaining behind PRs get swept. The normal `push` trigger on
+# auto-update never fires — GitHub's recursion guard blocks push events from
+# GITHUB_TOKEN merges — but workflow_dispatch is exempt from that guard.
+#
 # Author/approval rule:
 #   * owner- or Dependabot-authored PR  → CI green is enough (unchanged).
 #   * `agent-review`-flagged PR         → also needs an APPROVED review from a
@@ -134,3 +139,9 @@ jobs:
           # --auto lets GitHub queue the merge through the branch-protection ruleset
           # rather than attempting an immediate merge that the ruleset may reject.
           gh pr merge "$pr" --squash --delete-branch --auto
+
+          # Kick off the auto-update sweep for remaining open PRs. The normal push
+          # trigger on auto-update-prs.yml never fires because GitHub's recursion
+          # guard blocks push events when GITHUB_TOKEN does the squash merge.
+          # workflow_dispatch is exempt from that guard and does fire.
+          gh workflow run auto-update-prs.yml --repo "$GH_REPO" --ref trunk || true
