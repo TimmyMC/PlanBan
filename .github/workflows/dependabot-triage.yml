@@ -102,16 +102,18 @@ jobs:
               [ "$approved" -gt 0 ] && { echo "PR #$pr: already approved — skip."; continue; }
 
               # Parse "from X to Y" from Dependabot's standard title format.
-              from=$(echo "$title" | grep -oP 'from \K[0-9]+\.[0-9]+' | head -1 || true)
-              to=$(echo "$title"   | grep -oP ' to \K[0-9]+\.[0-9]+'  | head -1 || true)
+              # v? handles GitHub Actions titles like "from v3 to v4"; (?:\.[0-9]+)?
+              # handles single-component versions (e.g. "v3" with no minor).
+              from=$(echo "$title" | grep -oP 'from v?\K[0-9]+(?:\.[0-9]+)?' | head -1 || true)
+              to=$(echo "$title"   | grep -oP ' to v?\K[0-9]+(?:\.[0-9]+)?'  | head -1 || true)
               if [ -z "$from" ] || [ -z "$to" ]; then
                 echo "PR #$pr: can't parse version from title — leaving for human."; continue
               fi
 
               from_major=$(echo "$from" | cut -d. -f1)
               to_major=$(echo "$to"     | cut -d. -f1)
-              from_minor=$(echo "$from" | cut -d. -f2)
-              to_minor=$(echo "$to"     | cut -d. -f2)
+              from_minor=$(echo "$from" | cut -s -d. -f2); from_minor=${from_minor:-0}
+              to_minor=$(echo "$to"     | cut -s -d. -f2); to_minor=${to_minor:-0}
 
               if [ "$to_major" -gt "$from_major" ]; then
                 bump=major
@@ -124,13 +126,23 @@ jobs:
               echo "PR #$pr ($bump): $title"
               case "$bump" in
                 patch|minor)
-                  gh pr review "$pr" --approve \
-                    --body "Auto-approved (backfill): $bump dependency bump. Merges once CI is green; a major bump would instead be routed to agent review."
-                  echo "Approved PR #$pr."
+                  if gh pr review "$pr" --approve \
+                      --body "Auto-approved (backfill): $bump dependency bump. Merges once CI is green; a major bump would instead be routed to agent review."; then
+                    echo "Approved PR #$pr."
+                  else
+                    echo "::warning::could not approve PR #$pr — check token permissions"
+                  fi
                   ;;
                 major)
-                  gh pr edit "$pr" --add-label agent-review --add-label complexity:sonnet
-                  echo "Routed major PR #$pr to agent review."
+                  if gh pr edit "$pr" --add-label agent-review --add-label complexity:sonnet; then
+                    echo "Routed major PR #$pr to agent review."
+                    # agent-review.yml only triggers on workflow_run; for pre-existing PRs
+                    # whose CI already finished, dispatch it directly so it isn't missed.
+                    gh workflow run agent-review.yml --repo "$GH_REPO" -f pr="$pr" \
+                      || echo "::warning::could not dispatch agent-review for PR #$pr — trigger manually"
+                  else
+                    echo "::warning::could not label PR #$pr — check token permissions"
+                  fi
                   ;;
               esac
             done

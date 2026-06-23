@@ -121,6 +121,7 @@ jobs:
           done
 
           if [ "$needs_approval" = "true" ]; then
+            eligible=false  # author auto-qualify doesn't override an explicit review gate
             # Latest review state per login; approval must be from a reviewer-bot or owner.
             declare -A last
             while IFS=$'\t' read -r login state; do
