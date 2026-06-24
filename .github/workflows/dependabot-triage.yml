@@ -5,8 +5,10 @@ name: Dependabot triage
 #   * patch / minor bump → low risk → auto-approve, satisfying the review requirement.
 #     `automerge.yml` already treats Dependabot as eligible-on-green, so it then merges
 #     with no human (once the PR is current — staleness is the auto-update sweep's job).
-#   * major bump, 100% compatibility score → GitHub's aggregate CI data across all repos
-#     shows zero breakage for this exact version jump → auto-approve like patch/minor.
+#   * major bump, 100% compatibility score → GitHub's aggregate CI data shows no CI
+#     failures for this version jump across all repos that received it → auto-approve
+#     like patch/minor. Note: the score is a ratio, not a sample-size-bounded guarantee;
+#     a niche package updated in one repo that passed also scores 100%.
 #   * major bump, <100% compatibility score → higher risk → route into the tier+1
 #     agent-review path by labelling `agent-review` + `complexity:sonnet`. `agent-review.yml`
 #     then reviews as the installed claude[bot] App (Opus) on CI-complete and, on pass,
@@ -145,6 +147,10 @@ jobs:
                   fi
                   ;;
                 major)
+                  # Backfill has no access to fetch-metadata, so the 100%-compat-score
+                  # bypass used by the triage job is unavailable here. Majors always go
+                  # to agent review from the backfill; the triage job handles compat-aware
+                  # routing for newly-opened PRs.
                   if gh pr edit "$pr" --add-label agent-review --add-label complexity:sonnet; then
                     echo "Routed major PR #$pr to agent review."
                     # agent-review.yml only triggers on workflow_run; for pre-existing PRs

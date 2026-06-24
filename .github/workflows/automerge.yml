@@ -22,8 +22,10 @@ name: Auto-merge
 #   * owner PR, or patch/minor Dependabot bump → CI green is enough.
 #   * any other PR, including major Dependabot  → also needs an APPROVED review
 #     from a reviewer identity (repo var REVIEWER_LOGINS) or the owner.
-#     Major bumps carry the `agent-review` label (added by dependabot-triage.yml),
-#     which is the signal that overrides the Dependabot auto-qualify.
+#     Major bumps with <100% compatibility score carry the `agent-review` label
+#     (added by dependabot-triage.yml), which overrides the Dependabot auto-qualify.
+#     100%-compat majors are auto-approved by triage without the label and merge like
+#     patch/minor bumps — they never reach the approval check here.
 #     An agent can't self-approve (distinct identity + GitHub blocks self-approval),
 #     and an agent approval can NEVER clear a gate change — that still needs an
 #     owner review, enforced separately in ci-complete.yml's gate-integrity job.
