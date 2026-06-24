@@ -19,12 +19,14 @@ name: Auto-merge
 # GITHUB_TOKEN merges — but workflow_dispatch is exempt from that guard.
 #
 # Author/approval rule:
-#   * owner- or Dependabot-authored PR → CI green is enough.
-#   * any other PR                     → also needs an APPROVED review from a
-#     reviewer identity (repo var REVIEWER_LOGINS) or the owner. An agent can't
-#     self-approve (distinct identity + GitHub blocks self-approval), and an agent
-#     approval can NEVER clear a gate change — that still needs an owner review,
-#     enforced separately in ci-complete.yml's gate-integrity job.
+#   * owner PR, or patch/minor Dependabot bump → CI green is enough.
+#   * any other PR, including major Dependabot  → also needs an APPROVED review
+#     from a reviewer identity (repo var REVIEWER_LOGINS) or the owner.
+#     Major bumps carry the `agent-review` label (added by dependabot-triage.yml),
+#     which is the signal that overrides the Dependabot auto-qualify.
+#     An agent can't self-approve (distinct identity + GitHub blocks self-approval),
+#     and an agent approval can NEVER clear a gate change — that still needs an
+#     owner review, enforced separately in ci-complete.yml's gate-integrity job.
 
 on:
   workflow_run:
@@ -103,10 +105,22 @@ jobs:
           # 4) Eligibility.
           eligible=false
           lower=$(printf '%s' "$author" | tr '[:upper:]' '[:lower:]')
-          if [ "$author" = "$OWNER" ] || printf '%s' "$lower" | grep -q dependabot; then
-            eligible=true
-          else
-            # Any other PR needs an approval from a reviewer or the owner.
+
+          # `agent-review` means "approval required regardless of author" —
+          # dependabot-triage adds it for major bumps; it also covers any PR
+          # manually routed for review. Without it, owner and patch/minor
+          # Dependabot PRs qualify on CI green alone.
+          case ",$labels," in
+            *",agent-review,"*) ;;
+            *)
+              if [ "$author" = "$OWNER" ] || printf '%s' "$lower" | grep -q dependabot; then
+                eligible=true
+              fi
+              ;;
+          esac
+
+          if [ "$eligible" != "true" ]; then
+            # Needs an approval from a reviewer or the owner.
             declare -A last
             while IFS=$'\t' read -r login state; do
               case "$state" in APPROVED|CHANGES_REQUESTED|DISMISSED) last["$login"]="$state" ;; esac
