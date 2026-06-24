@@ -19,14 +19,12 @@ name: Auto-merge
 # GITHUB_TOKEN merges — but workflow_dispatch is exempt from that guard.
 #
 # Author/approval rule:
-#   * owner- or Dependabot-authored PR  → CI green is enough (unchanged).
-#   * `agent-review`-flagged PR         → also needs an APPROVED review from a
-#     tier+1 reviewer identity (repo var REVIEWER_LOGINS) or an owner. Triggered
-#     by either the `agent-review` label OR the PR author appearing in the
-#     IMPLEMENT_AUTHORS repo var — no manual label required for bot-opened PRs.
-#     An agent can't self-approve (distinct identity + GitHub blocks self-approval),
-#     and an agent approval can NEVER clear a gate change — that still needs an
-#     owner review, enforced separately in ci-complete.yml's gate-integrity job.
+#   * owner- or Dependabot-authored PR → CI green is enough.
+#   * any other PR                     → also needs an APPROVED review from a
+#     reviewer identity (repo var REVIEWER_LOGINS) or the owner. An agent can't
+#     self-approve (distinct identity + GitHub blocks self-approval), and an agent
+#     approval can NEVER clear a gate change — that still needs an owner review,
+#     enforced separately in ci-complete.yml's gate-integrity job.
 
 on:
   workflow_run:
@@ -62,13 +60,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
-          # Space-separated reviewer-bot logins whose approval can merge an
-          # `agent-review`-flagged PR. Unset ⇒ those PRs wait for a human (safe default).
+          # Space-separated reviewer-bot logins whose approval can merge a PR.
+          # Unset ⇒ non-owner/non-dependabot PRs wait for a human (safe default).
           REVIEWER_LOGINS: ${{ vars.REVIEWER_LOGINS }}
-          # Space-separated implementer logins (same list as implement-next uses).
-          # PRs authored by these accounts need owner/reviewer approval automatically
-          # — no manual agent-review label required.
-          IMPLEMENT_AUTHORS: ${{ vars.IMPLEMENT_AUTHORS }}
           EVENT: ${{ github.event_name }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           REVIEW_PR: ${{ github.event.pull_request.number }}
@@ -111,18 +105,8 @@ jobs:
           lower=$(printf '%s' "$author" | tr '[:upper:]' '[:lower:]')
           if [ "$author" = "$OWNER" ] || printf '%s' "$lower" | grep -q dependabot; then
             eligible=true
-          fi
-
-          # agent-review label OR author in IMPLEMENT_AUTHORS → needs an approval.
-          needs_approval=false
-          case ",$labels," in *",agent-review,"*) needs_approval=true ;; esac
-          for ia in ${IMPLEMENT_AUTHORS:-}; do
-            [ "$author" = "$ia" ] && needs_approval=true && break
-          done
-
-          if [ "$needs_approval" = "true" ]; then
-            eligible=false  # author auto-qualify doesn't override an explicit review gate
-            # Latest review state per login; approval must be from a reviewer-bot or owner.
+          else
+            # Any other PR needs an approval from a reviewer or the owner.
             declare -A last
             while IFS=$'\t' read -r login state; do
               case "$state" in APPROVED|CHANGES_REQUESTED|DISMISSED) last["$login"]="$state" ;; esac
@@ -134,7 +118,7 @@ jobs:
           fi
 
           if [ "$eligible" != "true" ]; then
-            echo "PR #$pr not yet eligible (needs a tier+1 reviewer or owner approval)."; exit 0
+            echo "PR #$pr not yet eligible (needs a reviewer or owner approval)."; exit 0
           fi
 
           echo "PR #$pr eligible (CI green, approval/author OK) — squash-merging."
