@@ -5,9 +5,11 @@ name: Dependabot triage
 #   * patch / minor bump → low risk → auto-approve, satisfying the review requirement.
 #     `automerge.yml` already treats Dependabot as eligible-on-green, so it then merges
 #     with no human (once the PR is current — staleness is the auto-update sweep's job).
-#   * major bump → higher risk → route into the existing tier+1 agent-review path by
-#     labelling `agent-review` + `complexity:sonnet`. `agent-review.yml` then reviews it
-#     as the installed claude[bot] App (one tier up = Opus) on CI-complete and, on pass,
+#   * major bump, 100% compatibility score → GitHub's aggregate CI data across all repos
+#     shows zero breakage for this exact version jump → auto-approve like patch/minor.
+#   * major bump, <100% compatibility score → higher risk → route into the tier+1
+#     agent-review path by labelling `agent-review` + `complexity:sonnet`. `agent-review.yml`
+#     then reviews as the installed claude[bot] App (Opus) on CI-complete and, on pass,
 #     approves → auto-merges; on issues it requests changes for a human.
 #
 # `pull_request_target`, not `pull_request`: a Dependabot PR's `pull_request` run executes
@@ -54,6 +56,8 @@ jobs:
           # For a GROUPED update (e.g. the rust-deps group), this is the HIGHEST bump in
           # the group — so a group containing any major routes to review. Conservative.
           UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          # 0–100: % of CI runs that passed for this exact version jump across GitHub.
+          COMPAT: ${{ steps.meta.outputs.compatibility-score }}
         run: |
           set -euo pipefail
           echo "PR #$PR update-type: ${UPDATE_TYPE:-<none>}"
@@ -68,9 +72,16 @@ jobs:
               echo "Approved patch/minor PR #$PR."
               ;;
             version-update:semver-major)
-              # Route into the tier+1 agent-review pipeline (see agent-review.yml).
-              gh pr edit "$PR" --add-label agent-review --add-label complexity:sonnet
-              echo "Routed major PR #$PR to agent review (agent-review + complexity:sonnet)."
+              if [ "${COMPAT:-0}" = "100" ]; then
+                # 100% compatibility across GitHub → no known breakage, safe to auto-approve.
+                gh pr review "$PR" --approve \
+                  --body "Auto-approved: major bump with 100% compatibility score — zero CI failures for this version jump across GitHub. A <100% score would instead route to agent review."
+                echo "Approved major PR #$PR (100% compat score)."
+              else
+                # Route into the tier+1 agent-review pipeline (see agent-review.yml).
+                gh pr edit "$PR" --add-label agent-review --add-label complexity:sonnet
+                echo "Routed major PR #$PR to agent review (compat=${COMPAT:-unknown}%)."
+              fi
               ;;
             *)
               echo "Unknown/empty update-type — leaving PR #$PR for a human."
