@@ -127,7 +127,7 @@ gh issue comment <N> --body "🤖 Implementation started locally (Zlyzart)."
 
 - Push the branch (as Zlyzart — this triggers CI) and open a **DRAFT** PR into `trunk`
   whose body contains `Closes #<N>`.
-- Label the PR `agent-authored` and copy the issue's `complexity:<tier>` label onto it
+- Label the PR `agent-review` and copy the issue's `complexity:<tier>` label onto it
   (the CI reviewer routing reads it).
 - Leave it a draft. After CI is green, the installed Claude GitHub App reviews it and —
   if it passes (non-opus) — approves + marks it ready so auto-merge takes it.
