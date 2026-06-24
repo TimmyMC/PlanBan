@@ -19,10 +19,11 @@ name: Auto-update PRs
 # does NOT re-trigger the PR's `pull_request` CI (GitHub's recursion guard), so CI
 # would never re-run. AUTOMERGE_PAT (contents + pull-requests write, created as the
 # least-privilege Zlyzart bot — never the owner) makes the update look like a real
-# push. If the secret is unset the job FAILS LOUDLY — it used to exit 0 with a
-# warning, which silently hid for a long time that the secret was never set. Run the
-# sweep on demand via `workflow_dispatch`. (Stale *running* CI is cancelled
-# separately by the `concurrency` block in ci-complete.yml.)
+# push. If the secret is unset OR expired the job FAILS LOUDLY — it validates the
+# token with a pre-flight API call so a stale/invalid PAT surfaces immediately as a
+# red build, not a silent no-op. Run the sweep on demand via `workflow_dispatch`.
+# (Stale *running* CI is cancelled separately by the `concurrency` block in
+# ci-complete.yml.)
 
 on:
   push:
@@ -52,8 +53,13 @@ jobs:
           GH_TOKEN: ${{ secrets.AUTOMERGE_PAT }}
           REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "::error::AUTOMERGE_PAT is not set — auto-update cannot run. A branch update by the default GITHUB_TOKEN does not re-trigger CI, so a PAT (Zlyzart bot, contents + pull-requests write) is required. Set the AUTOMERGE_PAT secret."
+            exit 1
+          fi
+          if ! gh api user >/dev/null 2>&1; then
+            echo "::error::AUTOMERGE_PAT is expired or invalid — renew it (Zlyzart bot, contents + pull-requests write) and update the AUTOMERGE_PAT secret."
             exit 1
           fi
 
@@ -103,8 +109,13 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "::error::AUTOMERGE_PAT is not set — cannot keep this PR current with trunk. Set the AUTOMERGE_PAT secret (Zlyzart bot, contents + pull-requests write)."
+            exit 1
+          fi
+          if ! gh api user >/dev/null 2>&1; then
+            echo "::error::AUTOMERGE_PAT is expired or invalid — renew it (Zlyzart bot, contents + pull-requests write) and update the AUTOMERGE_PAT secret."
             exit 1
           fi
 

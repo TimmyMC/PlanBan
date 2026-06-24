@@ -1,0 +1,165 @@
+name: Dependabot triage
+
+# Risk-tier Dependabot PRs so the strict trunk ruleset (requires 1 approving review,
+# no bypass) stops stranding them:
+#   * patch / minor bump → low risk → auto-approve, satisfying the review requirement.
+#     `automerge.yml` already treats Dependabot as eligible-on-green, so it then merges
+#     with no human (once the PR is current — staleness is the auto-update sweep's job).
+#   * major bump, 100% compatibility score → GitHub's aggregate CI data shows no CI
+#     failures for this version jump across all repos that received it → auto-approve
+#     like patch/minor. Note: the score is a ratio, not a sample-size-bounded guarantee;
+#     a niche package updated in one repo that passed also scores 100%.
+#   * major bump, <100% compatibility score → higher risk → route into the tier+1
+#     agent-review path by labelling `agent-review` + `complexity:sonnet`. `agent-review.yml`
+#     then reviews as the installed claude[bot] App (Opus) on CI-complete and, on pass,
+#     approves → auto-merges; on issues it requests changes for a human.
+#
+# `pull_request_target`, not `pull_request`: a Dependabot PR's `pull_request` run executes
+# in GitHub's secret-isolated, read-only context, so it can't approve or label. The
+# `_target` variant runs in the BASE (trunk) context with a write token. This is safe here
+# because we NEVER check out or execute PR code — we only read Dependabot's own metadata
+# and call `gh` against the API (same rationale as label-guard.yml).
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  # Manual backfill: run after deploying this workflow so existing open Dependabot
+  # PRs that pre-date the workflow get triaged (they missed the `opened` event and
+  # the auto-update sweep skips BLOCKED PRs, so they'd never get a synchronize either).
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dependabot-triage-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Approve patch/minor, route majors to agent review
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the dependency update metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          # The PR is in this repo (Dependabot branches are not forks), so the default
+          # token can read the PR. No alert lookup is needed.
+          github-token: ${{ github.token }}
+
+      - name: Triage by semver bump level
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          # For a GROUPED update (e.g. the rust-deps group), this is the HIGHEST bump in
+          # the group — so a group containing any major routes to review. Conservative.
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          # 0–100: % of CI runs that passed for this exact version jump across GitHub.
+          COMPAT: ${{ steps.meta.outputs.compatibility-score }}
+        run: |
+          set -euo pipefail
+          echo "PR #$PR update-type: ${UPDATE_TYPE:-<none>}"
+
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor)
+              # Approve so the ruleset's 1-review requirement is met; automerge.yml lands
+              # it on green. (Re-runs on `synchronize`, so a rebase that dismisses the
+              # stale approval is followed by a fresh one.)
+              gh pr review "$PR" --approve \
+                --body "Auto-approved: ${UPDATE_TYPE#version-update:semver-} dependency bump. Merges once CI is green; a major bump would instead be routed to agent review."
+              echo "Approved patch/minor PR #$PR."
+              ;;
+            version-update:semver-major)
+              if [ "${COMPAT:-0}" = "100" ]; then
+                # 100% compatibility across GitHub → no known breakage, safe to auto-approve.
+                gh pr review "$PR" --approve \
+                  --body "Auto-approved: major bump with 100% compatibility score — zero CI failures for this version jump across GitHub. A <100% score would instead route to agent review."
+                echo "Approved major PR #$PR (100% compat score)."
+              else
+                # Route into the tier+1 agent-review pipeline (see agent-review.yml).
+                gh pr edit "$PR" --add-label agent-review --add-label complexity:sonnet
+                echo "Routed major PR #$PR to agent review (compat=${COMPAT:-unknown}%)."
+              fi
+              ;;
+            *)
+              echo "Unknown/empty update-type — leaving PR #$PR for a human."
+              ;;
+          esac
+
+  backfill:
+    name: Backfill existing open Dependabot PRs
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Triage open PRs that pre-date this workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          gh pr list --repo "$GH_REPO" --author "dependabot[bot]" --state open \
+            --limit 100 --json number,title,labels \
+            --jq '.[] | [(.number | tostring), .title, ([.labels[].name] | join(","))] | join("\t")' \
+          | while IFS=$'\t' read -r pr title labels; do
+              # Skip already-triaged PRs
+              case ",$labels," in
+                *",agent-review,"*) echo "PR #$pr: already has agent-review — skip."; continue ;;
+              esac
+              approved=$(gh api "repos/$GH_REPO/pulls/$pr/reviews" \
+                --jq '[.[] | select(.user.login == "github-actions[bot]" and .state == "APPROVED")] | length')
+              [ "$approved" -gt 0 ] && { echo "PR #$pr: already approved — skip."; continue; }
+
+              # Parse "from X to Y" from Dependabot's standard title format.
+              # v? handles GitHub Actions titles like "from v3 to v4"; (?:\.[0-9]+)?
+              # handles single-component versions (e.g. "v3" with no minor).
+              from=$(echo "$title" | grep -oP 'from v?\K[0-9]+(?:\.[0-9]+)?' | head -1 || true)
+              to=$(echo "$title"   | grep -oP ' to v?\K[0-9]+(?:\.[0-9]+)?'  | head -1 || true)
+              if [ -z "$from" ] || [ -z "$to" ]; then
+                echo "PR #$pr: can't parse version from title — leaving for human."; continue
+              fi
+
+              from_major=$(echo "$from" | cut -d. -f1)
+              to_major=$(echo "$to"     | cut -d. -f1)
+              from_minor=$(echo "$from" | cut -s -d. -f2); from_minor=${from_minor:-0}
+              to_minor=$(echo "$to"     | cut -s -d. -f2); to_minor=${to_minor:-0}
+
+              if [ "$to_major" -gt "$from_major" ]; then
+                bump=major
+              elif [ "$to_minor" -gt "$from_minor" ]; then
+                bump=minor
+              else
+                bump=patch
+              fi
+
+              echo "PR #$pr ($bump): $title"
+              case "$bump" in
+                patch|minor)
+                  if gh pr review "$pr" --approve \
+                      --body "Auto-approved (backfill): $bump dependency bump. Merges once CI is green; a major bump would instead be routed to agent review."; then
+                    echo "Approved PR #$pr."
+                  else
+                    echo "::warning::could not approve PR #$pr — check token permissions"
+                  fi
+                  ;;
+                major)
+                  # Backfill has no access to fetch-metadata, so the 100%-compat-score
+                  # bypass used by the triage job is unavailable here. Majors always go
+                  # to agent review from the backfill; the triage job handles compat-aware
+                  # routing for newly-opened PRs.
+                  if gh pr edit "$pr" --add-label agent-review --add-label complexity:sonnet; then
+                    echo "Routed major PR #$pr to agent review."
+                    # agent-review.yml only triggers on workflow_run; for pre-existing PRs
+                    # whose CI already finished, dispatch it directly so it isn't missed.
+                    gh workflow run agent-review.yml --repo "$GH_REPO" -f pr="$pr" \
+                      || echo "::warning::could not dispatch agent-review for PR #$pr — trigger manually"
+                  else
+                    echo "::warning::could not label PR #$pr — check token permissions"
+                  fi
+                  ;;
+              esac
+            done

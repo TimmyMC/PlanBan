@@ -1,7 +1,7 @@
 # Tiered agent pipeline
 
 An opt-in, hook-driven pipeline that takes a tracker issue from raw to merged through
-escalating model tiers, with every agent-authored PR reviewed by a strictly higher tier and
+escalating model tiers, with every agent PR reviewed by a strictly higher tier and
 a human at the decisions that matter. It rides **on top of** the existing CI gates — it never
 relaxes them (Constitution §1, §9).
 
@@ -13,7 +13,7 @@ issue opened ─► issue-triage adds status:unrefined ─►(hook) agent-refine
    │                 └─► HUMAN reviews, applies status:ready (the go decision)
    └─ ambiguous  → questions + status:needs-decision ─► HUMAN answers ─► requeue
 status:ready ─►(local) /implement-next picks a TRUSTED-authored ready issue → claims status:in-progress
-   └─ draft PR (agent-authored, complexity:<tier>) opened as Zlyzart → CI runs
+   └─ draft PR (agent-review, complexity:<tier>) opened as Zlyzart → CI runs
 PR ─►(hook) agent-review (installed App, reviewer = tier+1)
    ├─ pass (haiku/sonnet) → approve + mark ready → auto-merge
    ├─ issues              → request changes (stays draft) → implementer loop
@@ -166,7 +166,7 @@ Lifecycle: `status:unrefined → status:refined → (human) status:ready → sta
 (PR) → merged`, with `status:needs-decision` (blocked on a human) and `status:deferred` (retry)
 as off-ramps. The refiner only ever reaches `status:refined`; a human applies `status:ready`,
 which is the gate between refinement and implementation. Routing:
-`complexity:{haiku,sonnet,opus}`, `agent-authored`, `review:{passed,changes-requested}`. Holds:
+`complexity:{haiku,sonnet,opus}`, `agent-review`, `review:{passed,changes-requested}`. Holds:
 `do-not-merge` (human stop). The taxonomy is version-controlled in `.github/labels.yml` and synced
 by `label-sync.yml`.
 
