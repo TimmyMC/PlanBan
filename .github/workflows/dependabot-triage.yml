@@ -19,6 +19,13 @@ name: Dependabot triage
 # `_target` variant runs in the BASE (trunk) context with a write token. This is safe here
 # because we NEVER check out or execute PR code — we only read Dependabot's own metadata
 # and call `gh` against the API (same rationale as label-guard.yml).
+#
+# Why AUTOMERGE_PAT, not github.token, for approvals: GitHub's "Allow GitHub Actions to
+# create and approve pull requests" repo setting is OFF (and should stay off — the
+# agent-review gate relies on real reviewer identity). AUTOMERGE_PAT is a classic PAT
+# for the Zlyzart collaborator (Write access) and CAN approve PRs. The same PAT is
+# used by auto-update-prs.yml. `repo`-scoped classic PATs also satisfy the requirement
+# for dispatching workflow_dispatch events (no additional `workflow` scope needed).
 
 on:
   pull_request_target:
@@ -52,7 +59,10 @@ jobs:
 
       - name: Triage by semver bump level
         env:
-          GH_TOKEN: ${{ github.token }}
+          # AUTOMERGE_PAT (Zlyzart, Write collaborator) approves because
+          # github-actions[bot] is blocked by the repo's "Allow GitHub Actions
+          # to create and approve pull requests" setting (intentionally OFF).
+          GH_TOKEN: ${{ secrets.AUTOMERGE_PAT || github.token }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           # For a GROUPED update (e.g. the rust-deps group), this is the HIGHEST bump in
@@ -97,10 +107,17 @@ jobs:
     steps:
       - name: Triage open PRs that pre-date this workflow
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Use AUTOMERGE_PAT (Zlyzart, Write collaborator) — github-actions[bot]
+          # cannot approve PRs (repo setting OFF) and cannot dispatch workflows
+          # without actions:write. classic repo-scoped PAT satisfies both.
+          GH_TOKEN: ${{ secrets.AUTOMERGE_PAT }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::AUTOMERGE_PAT is not set — backfill cannot approve PRs or dispatch agent-review. Set the AUTOMERGE_PAT secret (Zlyzart bot, repo scope)."
+            exit 1
+          fi
 
           gh pr list --repo "$GH_REPO" --author "dependabot[bot]" --state open \
             --limit 100 --json number,title,labels \
