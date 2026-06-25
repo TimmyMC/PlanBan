@@ -15,19 +15,32 @@ name: Re-run CI on owner approval
 # run on the commit, no stale failure. Its completion fires automerge.yml (workflow_run:
 # CI complete success) which lands the PR.
 #
+# Race coverage — two triggers handle all timing orderings:
+#   1. pull_request_review submitted: owner approves while CI is running or already
+#      failed. Re-runs the CI run in both states so gate-integrity re-evaluates.
+#   2. workflow_run CI complete [failure]: CI finishes with failure AFTER an approval
+#      already existed (approval was submitted during CI execution, before gate-integrity
+#      ran and read the reviews). Re-runs only when gate-integrity is the sole reason
+#      CI failed — prevents infinite re-run loops on real code failures.
+#
 # Only owners can clear a gate change (matches gate-integrity's OWNERS allowlist), so a
 # non-owner approval is filtered out at the job-if level — no runner is started.
 
 on:
   pull_request_review:
     types: [submitted]
+  workflow_run:
+    workflows: ["CI complete"]
+    types: [completed]
 
 permissions:
   actions: write # re-run a workflow run
   contents: read
 
 concurrency:
-  group: rerun-ci-on-approval-${{ github.event.pull_request.number }}
+  # Group by PR number for review events, by head SHA for CI-completion events.
+  # Prevents duplicate dispatches from stacking up for the same PR/commit.
+  group: rerun-ci-on-approval-${{ github.event.pull_request.number || github.event.workflow_run.head_sha }}
   # false: don't cancel a running re-run dispatch if a second review arrives for the
   # same PR — a racing non-owner review would otherwise silently kill the approved run.
   cancel-in-progress: false
@@ -38,37 +51,72 @@ jobs:
     # Filter at job level so non-owner and non-approval events skip without starting a
     # runner. Keep the OWNERS list in sync with ci-complete.yml's gate-integrity job.
     if: >-
-      github.event.review.state == 'approved' &&
-      contains(fromJSON('["TimmyMC"]'), github.event.review.user.login)
+      (github.event_name == 'pull_request_review' &&
+       github.event.review.state == 'approved' &&
+       contains(fromJSON('["TimmyMC"]'), github.event.review.user.login)) ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'failure')
     runs-on: ubuntu-latest
     steps:
       - name: Re-run the PR's failed CI run in place
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
           # Scoping by branch keeps the --limit small and correct on busy repos.
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id || '' }}
         run: |
           set -euo pipefail
 
-          # Latest "CI complete" run for this PR's head commit. Scoped to the PR branch
-          # so runs from other branches don't fill the window (workflow referenced by
-          # filename so it resolves regardless of the display name).
-          run_id=$(gh run list --repo "$REPO" --workflow ci-complete.yml \
-                     --branch "$HEAD_REF" --limit 10 \
-                     --json databaseId,headSha \
-                     --jq "[.[] | select(.headSha==\"$HEAD_SHA\")] | sort_by(.databaseId) | last | .databaseId // empty")
-          if [ -z "${run_id:-}" ]; then
-            echo "No 'CI complete' run found for $HEAD_SHA — nothing to re-run."
-            exit 0
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            # CI complete finished with failure. Only re-run if:
+            #   (a) there is an open PR for this commit, AND
+            #   (b) an owner has already approved the PR, AND
+            #   (c) gate-integrity is the sole reason CI failed (no real code failures).
+            # Guard (c) prevents infinite re-run loops: if CI keeps failing for real
+            # reasons, we stop after the first re-run detects non-gate failures.
+            PR=$(gh pr list --state open --repo "$REPO" --json number,headRefOid \
+                   --jq "[.[] | select(.headRefOid==\"$HEAD_SHA\")][0].number // empty")
+            if [ -z "${PR:-}" ]; then
+              echo "No open PR for SHA $HEAD_SHA — nothing to do."
+              exit 0
+            fi
+
+            approved=$(gh api "repos/$REPO/pulls/$PR/reviews" \
+              --jq '[.[] | select(.state == "APPROVED" and (.user.login == "TimmyMC"))] | length')
+            if [ "${approved:-0}" -eq 0 ]; then
+              echo "CI failed on PR #$PR but no owner approval exists — not re-running."
+              exit 0
+            fi
+
+            checks=$(gh pr checks "$PR" --json name,conclusion 2>/dev/null || echo '[]')
+            real_failures=$(printf '%s' "$checks" \
+              | jq '[.[] | select((.conclusion // "" | ascii_downcase) == "failure")
+                           | select(.name != "Gate integrity" and .name != "CI complete"
+                                    and .name != "Approve patch/minor, route majors to agent review"
+                                    and .name != "Backfill existing open Dependabot PRs")] | length')
+            if [ "${real_failures:-1}" -gt 0 ]; then
+              echo "PR #$PR has $real_failures real failure(s) beyond gate-integrity — not re-running."
+              exit 0
+            fi
+
+            echo "PR #$PR: owner-approved, gate-integrity is the only failure — re-running."
+            run_id="$WORKFLOW_RUN_ID"
+          else
+            # pull_request_review path: owner just approved. Find the latest CI complete
+            # run for this commit and re-run it (handles both failure and in-progress states).
+            run_id=$(gh run list --repo "$REPO" --workflow ci-complete.yml \
+                       --branch "$HEAD_REF" --limit 10 \
+                       --json databaseId,headSha \
+                       --jq "[.[] | select(.headSha==\"$HEAD_SHA\")] | sort_by(.databaseId) | last | .databaseId // empty")
+            if [ -z "${run_id:-}" ]; then
+              echo "No 'CI complete' run found for $HEAD_SHA — nothing to re-run."
+              exit 0
+            fi
           fi
 
-          # jq prints JSON null as the string "null" for in-progress runs (conclusion is
-          # null in the API). Re-run in both the failure and in-progress cases: the
-          # approval is already live in the API, so gate-integrity will pick it up on the
-          # re-run regardless of whether the current attempt has already failed or is
-          # still executing.
           concl=$(gh run view "$run_id" --repo "$REPO" --json conclusion --jq '.conclusion')
           if [ "$concl" = "failure" ] || [ "$concl" = "null" ]; then
             echo "Re-running CI run $run_id (conclusion: $concl) — gate-integrity re-evaluates with the approval."
