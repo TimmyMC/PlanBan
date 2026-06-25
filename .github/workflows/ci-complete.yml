@@ -15,12 +15,17 @@ name: CI complete
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
-  # An owner approving review is how a deliberate gate change is cleared (see the
-  # gate-integrity job). Re-running on review submission lets that approval reach
-  # the guard and flow into auto-merge — the same role the `labeled` event plays
-  # for the (now legacy) label, but keyed on an unforgeable, identity-bound signal.
+  # Only `dismissed`, NOT `submitted`. An owner APPROVAL that clears a gate change must
+  # not spawn a fresh CI run here: that second run leaves a duplicate `CI complete`
+  # check on the commit alongside the pre-approval FAILURE, and the ruleset's
+  # required-status-check evaluation then reports the stale failure and blocks the
+  # merge forever (the bug that stalled every gate-change PR). Instead, the approval is
+  # handled by rerun-ci-on-approval.yml, which re-runs the EXISTING failed run in place
+  # so gate-integrity re-evaluates with the approval present and the SAME check flips
+  # green — one check run, no stale failure. A `dismissed` review still re-runs here so
+  # revoking an approval re-locks gate-integrity (re-fails it) as before.
   pull_request_review:
-    types: [submitted, dismissed]
+    types: [dismissed]
 
 # Restrict GITHUB_TOKEN to read-only by default; override per-job when more is needed.
 permissions:
@@ -72,8 +77,10 @@ jobs:
   # whole run fails and auto-merge (gated on CI success) never fires. A deliberate
   # gate change is cleared *only* by an approving PR review from an owner-allowlisted
   # login (computed in the "owner gate approval" step) — never by a label an agent
-  # could apply to its own PR. Also fires on label and review events so the approval
-  # always reaches the guard even when no new code was pushed.
+  # could apply to its own PR. On an owner APPROVAL the guard re-evaluates via
+  # rerun-ci-on-approval.yml re-running this run in place (reading the approval at
+  # runtime); it also fires directly on label and review-`dismissed` events so a
+  # revoked approval re-locks the gate even when no new code was pushed.
   gate-integrity:
     name: Gate integrity
     needs: changes

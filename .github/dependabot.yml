@@ -1,4 +1,12 @@
 version: 2
+
+# Grouping strategy: batch minor+patch bumps per ecosystem into ONE PR so the
+# auto-merge cascade tests and lands them together instead of N PRs each forcing a
+# rebase+full-CI of every other open PR (the strict ruleset serializes merges, so N
+# ungrouped PRs cost ~O(N^2) CI runs). Majors are deliberately LEFT OUT of the groups
+# (`update-types: [minor, patch]`) so each major stays its own PR and routes to
+# agent-review individually — one risky major never blocks a batch of safe patches,
+# and a safe batch never drags a major in without review.
 updates:
   # Rust workspace (clabby-core + clabby CLI).
   - package-ecosystem: cargo
@@ -9,6 +17,7 @@ updates:
     groups:
       rust-deps:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # The Tauri shell is a standalone crate outside the workspace.
   - package-ecosystem: cargo
@@ -16,6 +25,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      tauri-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # Frontend.
   - package-ecosystem: npm
@@ -23,9 +36,17 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      ui-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # The CI/automerge workflows themselves.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      actions-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
