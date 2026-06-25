@@ -61,9 +61,10 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    # github-actions doesn't support the semver-*-days keys (action tags aren't
+    # semver in Dependabot's model), so cool all action bumps by a flat default.
     cooldown:
-      semver-major-days: 7
-      semver-minor-days: 3
+      default-days: 7
     groups:
       actions-deps:
         patterns: ["*"]
