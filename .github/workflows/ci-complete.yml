@@ -301,7 +301,7 @@ jobs:
       # Best-effort upload for the README badge; never fails the gate (so a
       # missing CODECOV_TOKEN can't block merges).
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: lcov.info
           fail_ci_if_error: false
