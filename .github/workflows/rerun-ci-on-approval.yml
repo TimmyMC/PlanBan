@@ -1,0 +1,72 @@
+name: Re-run CI on owner approval
+
+# Companion to ci-complete.yml's gate-integrity gate. A PR that edits gate files
+# (.github/, tests, coverage thresholds) FAILS gate-integrity — and therefore the
+# required `CI complete` check — on its pre-approval run, by design. The owner clears
+# it by approving. The problem this workflow solves: if the approval spawned a *new*
+# CI run (ci-complete.yml used to trigger on `pull_request_review: submitted`), the
+# commit ends up with BOTH a stale `CI complete` FAILURE and a fresh SUCCESS, and the
+# trunk ruleset's required-status-check evaluation reports the FAILURE and blocks the
+# merge forever.
+#
+# Fix: on an owner approval, re-run the PR's EXISTING failed CI run in place. The
+# re-run re-evaluates gate-integrity with the approval now present, so the SAME
+# `CI complete` check flips from failure to success — one check run on the commit, no
+# stale failure. Its completion fires automerge.yml (workflow_run: CI complete success)
+# which lands the PR.
+#
+# Only owners can clear a gate change (matches gate-integrity's OWNERS allowlist), so a
+# non-owner approval triggers nothing here.
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  actions: write # re-run a workflow run
+  contents: read
+
+concurrency:
+  group: rerun-ci-on-approval-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  rerun:
+    name: Re-run failed CI so gate-integrity re-evaluates
+    if: github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-run the PR's failed CI run in place
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEWER: ${{ github.event.review.user.login }}
+          # Keep in sync with the OWNERS list in ci-complete.yml's gate-integrity job.
+          OWNERS: "TimmyMC"
+        run: |
+          set -euo pipefail
+
+          # Only an owner's approval clears a gate change; ignore everyone else's.
+          case " $OWNERS " in
+            *" $REVIEWER "*) : ;;
+            *) echo "Approver '$REVIEWER' is not an owner — nothing to re-run."; exit 0 ;;
+          esac
+
+          # Latest "CI complete" run for this PR's head commit (workflow referenced by
+          # filename so it resolves regardless of the display name).
+          run_id=$(gh run list --repo "$REPO" --workflow ci-complete.yml --limit 50 \
+                     --json databaseId,headSha \
+                     --jq "[.[] | select(.headSha==\"$HEAD_SHA\")] | sort_by(.databaseId) | last | .databaseId // empty")
+          if [ -z "${run_id:-}" ]; then
+            echo "No 'CI complete' run found for $HEAD_SHA — nothing to re-run."
+            exit 0
+          fi
+
+          concl=$(gh run view "$run_id" --repo "$REPO" --json conclusion --jq '.conclusion')
+          if [ "$concl" = "failure" ]; then
+            echo "Re-running failed run $run_id so gate-integrity re-evaluates with the approval."
+            gh run rerun "$run_id" --failed --repo "$REPO"
+          else
+            echo "Latest CI run $run_id is '$concl' — no re-run needed (automerge handles the approval)."
+          fi

@@ -1,4 +1,18 @@
 version: 2
+
+# Grouping strategy: batch minor+patch bumps per ecosystem into ONE PR so the
+# auto-merge cascade tests and lands them together instead of N PRs each forcing a
+# rebase+full-CI of every other open PR (the strict ruleset serializes merges, so N
+# ungrouped PRs cost ~O(N^2) CI runs). Majors are deliberately LEFT OUT of the groups
+# (`update-types: [minor, patch]`) so each major stays its own PR and routes to
+# agent-review individually — one risky major never blocks a batch of safe patches,
+# and a safe batch never drags a major in without review.
+#
+# Cooldown: wait after a release before opening a PR, so a version that gets yanked or
+# immediately re-patched never generates churn — and a major (which costs a tier+1
+# agent review) isn't reviewed only to be superseded days later. Majors wait longest;
+# patches aren't cooled (we want bugfixes promptly). Security updates are a separate
+# path and are not held by cooldown.
 updates:
   # Rust workspace (clabby-core + clabby CLI).
   - package-ecosystem: cargo
@@ -6,9 +20,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      semver-major-days: 7
+      semver-minor-days: 3
     groups:
       rust-deps:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # The Tauri shell is a standalone crate outside the workspace.
   - package-ecosystem: cargo
@@ -16,6 +34,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      semver-major-days: 7
+      semver-minor-days: 3
+    groups:
+      tauri-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # Frontend.
   - package-ecosystem: npm
@@ -23,9 +48,24 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      semver-major-days: 7
+      semver-minor-days: 3
+    groups:
+      ui-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # The CI/automerge workflows themselves.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    # github-actions doesn't support the semver-*-days keys (action tags aren't
+    # semver in Dependabot's model), so cool all action bumps by a flat default.
+    cooldown:
+      default-days: 7
+    groups:
+      actions-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
