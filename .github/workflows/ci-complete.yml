@@ -67,7 +67,7 @@ jobs:
       # outputs are empty (falsey) — every expensive job then skips (each also
       # requires event_name == 'pull_request'), while gate-integrity still runs
       # via its pull_request_review clause. The job itself still succeeds.
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         if: github.event_name == 'pull_request'
         id: filter
         with:
