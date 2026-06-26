@@ -149,6 +149,12 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Reviewing major Dependabot bumps is this job's purpose, but the action blocks
+          # bot-initiated runs by default ("Workflow initiated by non-human actor:
+          # dependabot"). The triggering actor for these reviews is dependabot[bot] (the
+          # PR author), so allow it explicitly. Safe: triage gates entry (only PRs it
+          # flagged `agent-review` reach here) and the reviewer only reads the diff.
+          allowed_bots: "dependabot"
           # No github_token on purpose: with it omitted, the action authenticates as
           # the installed Claude GitHub App (the reviewer identity) — distinct from the
           # local implementer (Zlyzart), so its APPROVE is a real second-party review
