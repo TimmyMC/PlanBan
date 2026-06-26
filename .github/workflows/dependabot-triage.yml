@@ -10,9 +10,11 @@ name: Dependabot triage
 #     like patch/minor. Note: the score is a ratio, not a sample-size-bounded guarantee;
 #     a niche package updated in one repo that passed also scores 100%.
 #   * major bump, <100% compatibility score → higher risk → route into the tier+1
-#     agent-review path by labelling `agent-review` + `complexity:sonnet`. `agent-review.yml`
-#     then reviews as the installed claude[bot] App (Opus) on CI-complete and, on pass,
-#     approves → auto-merges; on issues it requests changes for a human.
+#     agent-review path by labelling `agent-review` + `complexity:haiku`. `agent-review.yml`
+#     then reviews as the installed claude[bot] App on CI-complete and, on pass, approves →
+#     auto-merges; on issues it requests changes for a human. `complexity:haiku` (not
+#     `:sonnet`) puts the reviewer at the SONNET tier, not Opus: a dependency diff is a
+#     version-pin change, well within Sonnet's reach — Opus on it is wasted tokens.
 #
 # `pull_request_target`, not `pull_request`: a Dependabot PR's `pull_request` run executes
 # in GitHub's secret-isolated, read-only context, so it can't approve or label. The
@@ -93,7 +95,7 @@ jobs:
                 # the classic AUTOMERGE_PAT (repo scope only) lacks — it errors out. REST
                 # label add needs only repo scope.
                 gh api -X POST "repos/$GH_REPO/issues/$PR/labels" \
-                  -f 'labels[]=agent-review' -f 'labels[]=complexity:sonnet'
+                  -f 'labels[]=agent-review' -f 'labels[]=complexity:haiku'
                 echo "Routed major PR #$PR to agent review (compat=${COMPAT:-unknown}%)."
               fi
               ;;
@@ -171,7 +173,7 @@ jobs:
                   # REST label add (not `gh pr edit --add-label`): see the triage job —
                   # the GraphQL path needs read:org, which AUTOMERGE_PAT lacks.
                   if gh api -X POST "repos/$GH_REPO/issues/$pr/labels" \
-                       -f 'labels[]=agent-review' -f 'labels[]=complexity:sonnet'; then
+                       -f 'labels[]=agent-review' -f 'labels[]=complexity:haiku'; then
                     echo "Routed major PR #$pr to agent review."
                     # agent-review.yml only triggers on workflow_run; for pre-existing PRs
                     # whose CI already finished, dispatch it directly so it isn't missed.

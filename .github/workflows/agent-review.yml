@@ -101,6 +101,29 @@ jobs:
           if [ "${reviewed:-0}" -gt 0 ]; then
             echo "PR #$PR @ $head already reviewed — skipping."; echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
           fi
+          # Diff-hash dedup. The auto-update cascade rebases a PR onto fresh trunk: new
+          # head SHA, but the actual patch (the version bump) is unchanged. Re-reviewing
+          # an identical diff is wasted tokens — BUT only safe to skip when this review is
+          # ADVISORY: i.e. the PR touches CODEOWNERS-protected paths, so merging requires
+          # an owner/code-owner approval the agent can't give anyway. For an agent-GATED
+          # PR we must NOT skip — a rebase dismisses the agent's prior approval, and the
+          # re-review is what re-grants it (skipping would strand the PR unmerged).
+          files=$(gh pr view "$PR" --json files --jq '.files[].path')
+          owner_gated=false
+          if printf '%s\n' "$files" | grep -qE '^\.github/|^scripts/gate-guard\.sh$|^crates/cli/tests/use_case_coverage\.rs$|^crates/cli/tests/cli_docs\.rs$|^crates/core/tests/architecture\.rs$|^ui/src/use-case-coverage\.test\.ts$|^docs/use-cases\.md$|^docs/CONSTITUTION\.md$'; then
+            owner_gated=true
+          fi
+          diff=$(gh pr diff "$PR" 2>/dev/null || true)
+          diffhash=$(printf '%s' "$diff" | sha256sum | cut -c1-16)
+          if [ "$owner_gated" = "true" ]; then
+            prev=$(gh pr view "$PR" --json comments \
+              --jq '[.comments[].body | select(test("agent-review-diffhash:"))] | last // ""' \
+              | grep -oE 'agent-review-diffhash:[0-9a-f]+' | cut -d: -f2 || true)
+            if [ -n "${prev:-}" ] && [ "$diffhash" = "$prev" ]; then
+              echo "PR #$PR: diff unchanged ($diffhash) since last advisory review — skipping."
+              echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          fi
           # Don't start if real lint/test checks are failing or pending. Gate integrity is
           # a human-auth gate (owner must approve), not a code-quality failure — a PR that
           # only fails gate integrity can and should still get a code review. We're
@@ -118,10 +141,21 @@ jobs:
             echo "PR #$PR not ready (failing=$failing, pending=$pending) — skipping."
             echo "pr=" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          echo "pr=$PR"        >> "$GITHUB_OUTPUT"
-          echo "model=$model"  >> "$GITHUB_OUTPUT"
-          echo "human=$human"  >> "$GITHUB_OUTPUT"
-          echo "Reviewing #$PR ($tier → reviewer $model, human-required=$human)."
+          # Lightweight pass for dependency/version bumps (Dependabot author or the
+          # `dependencies` label): the diff is a version pin, so a single direct read
+          # beats spinning up the multi-agent /code-review pipeline. Everything else
+          # gets the full pass.
+          author=$(gh pr view "$PR" --json author --jq '.author.login')
+          lightweight=false
+          case ",$labels," in *",dependencies,"*) lightweight=true ;; esac
+          if [ "$author" = "dependabot[bot]" ]; then lightweight=true; fi
+          echo "pr=$PR"                >> "$GITHUB_OUTPUT"
+          echo "model=$model"          >> "$GITHUB_OUTPUT"
+          echo "human=$human"          >> "$GITHUB_OUTPUT"
+          echo "lightweight=$lightweight" >> "$GITHUB_OUTPUT"
+          echo "diffhash=$diffhash"    >> "$GITHUB_OUTPUT"
+          echo "owner_gated=$owner_gated" >> "$GITHUB_OUTPUT"
+          echo "Reviewing #$PR ($tier → reviewer $model, human-required=$human, lightweight=$lightweight)."
 
       - name: Check CLAUDE_CODE_OAUTH_TOKEN
         if: steps.pick.outputs.pr != ''
@@ -165,8 +199,11 @@ jobs:
           # Per claude-code-action docs, only set github_token when wiring your OWN
           # custom app instead of the installed one. (Was: secrets.REVIEWER_TOKEN, a
           # PAT — unsupported now; the App is the supported reviewer auth.)
-          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
-          plugins: "code-review@claude-code-plugins"
+          # No plugin marketplace/plugin for the lightweight (dependency-bump) pass — the
+          # /code-review multi-agent pipeline is overkill for a version-pin diff and is
+          # the dominant token cost. The full pass keeps it.
+          plugin_marketplaces: ${{ steps.pick.outputs.lightweight == 'true' && '' || 'https://github.com/anthropics/claude-code.git' }}
+          plugins: ${{ steps.pick.outputs.lightweight == 'true' && '' || 'code-review@claude-code-plugins' }}
           claude_args: '--model ${{ steps.pick.outputs.model }} --allowed-tools "Bash,Read,Grep,Glob"'
           prompt: |
             Review the code changes in PR #${{ steps.pick.outputs.pr }} of
@@ -178,7 +215,7 @@ jobs:
             trusted reviewer context — submit the review YOURSELF with `gh`; never defer
             it or settle for a plain comment.
 
-            Run `/code-review` for the detailed pass, then act with `gh`:
+            ${{ steps.pick.outputs.lightweight == 'true' && 'This is a small dependency/version bump — review the diff DIRECTLY in a single pass (do NOT invoke /code-review or any multi-agent tool), then act with `gh`:' || 'Run `/code-review` for the detailed pass, then act with `gh`:' }}
             - A real problem in the code → `gh pr review ${{ steps.pick.outputs.pr }} --request-changes`
               with specific file:line findings only; add the `review:changes-requested`
               label and remove `review:passed`; keep it a draft.
@@ -191,3 +228,20 @@ jobs:
               human must approve.
 
             Be terse. No fluff or bloat.
+
+      # Record the reviewed diff hash so a later rebase that doesn't change the patch can
+      # be skipped (see the dedup in the resolve step). Only for owner-gated PRs, where the
+      # agent review is advisory — for agent-gated PRs the dedup is intentionally disabled,
+      # so no marker is needed. A single sticky comment, edited in place to avoid clutter.
+      - name: Record reviewed diff hash (advisory reviews only)
+        if: steps.pick.outputs.pr != '' && steps.pick.outputs.owner_gated == 'true' && steps.pick.outputs.diffhash != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ steps.pick.outputs.pr }}
+          HASH: ${{ steps.pick.outputs.diffhash }}
+        run: |
+          set -euo pipefail
+          body="_Agent review tracked (advisory; owner approval still required)._ <!-- agent-review-diffhash:$HASH -->"
+          gh pr comment "$PR" --repo "$GH_REPO" --edit-last --body "$body" \
+            || gh pr comment "$PR" --repo "$GH_REPO" --body "$body"
