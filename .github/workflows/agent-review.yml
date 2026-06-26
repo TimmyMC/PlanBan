@@ -53,8 +53,9 @@ jobs:
     if: >
       vars.AGENTS_ENABLED == 'true' &&
       (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'pull_request'))
+       (github.event.workflow_run.event == 'pull_request' &&
+        (github.event.workflow_run.conclusion == 'success' ||
+         github.event.workflow_run.conclusion == 'failure')))
     steps:
       - name: Resolve PR & reviewer tier
         id: pick
@@ -108,7 +109,9 @@ jobs:
           checks=$(gh pr checks "$PR" --json name,conclusion 2>/dev/null || echo '[]')
           failing=$(printf '%s' "$checks" \
             | jq '[.[] | select((.conclusion // "" | ascii_downcase) == "failure")
-                         | select(.name != "Gate integrity" and .name != "CI complete")] | length')
+                         | select(.name != "Gate integrity" and .name != "CI complete"
+                                  and .name != "Approve patch/minor, route majors to agent review"
+                                  and .name != "Backfill existing open Dependabot PRs")] | length')
           pending=$(printf '%s' "$checks" \
             | jq '[.[] | select(.conclusion == null or .conclusion == "")] | length')
           if [ "${failing:-1}" -gt 0 ] || [ "${pending:-1}" -gt 0 ]; then

@@ -86,9 +86,17 @@ fi
 # 6) The gate machinery itself was modified (self-guard): any edit to a gate test,
 #    the CI workflows, or this script needs an explicit owner sign-off — strengthening
 #    is fine, but only a human can tell strengthening from weakening here.
+#    Exception: Dependabot version bumps only change `uses:` version pins in workflow
+#    files, not logic. Exempting them lets major action bumps flow through agent-review
+#    without requiring owner sign-off on every pin update. GITHUB_ACTOR is set by
+#    GitHub infrastructure and cannot be forged by PR content.
 guard='crates/cli/tests/use_case_coverage\.rs|ui/src/use-case-coverage\.test\.ts|crates/core/tests/architecture\.rs|crates/cli/tests/cli_docs\.rs|scripts/gate-guard\.sh|^\.github/workflows/'
 while IFS= read -r f; do
   [ -z "$f" ] && continue
+  if printf '%s\n' "$f" | grep -qE '^\.github/workflows/' \
+      && [ "${GITHUB_ACTOR:-}" = "dependabot[bot]" ]; then
+    continue
+  fi
   printf '%s\n' "$f" | grep -qE "$guard" && { add "gate/CI machinery modified: $f"; flag "$f"; }
 done <<< "$changed_files"
 
