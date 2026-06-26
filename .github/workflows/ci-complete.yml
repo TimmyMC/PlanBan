@@ -15,17 +15,20 @@ name: CI complete
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
-  # Only `dismissed`, NOT `submitted`. An owner APPROVAL that clears a gate change must
-  # not spawn a fresh CI run here: that second run leaves a duplicate `CI complete`
-  # check on the commit alongside the pre-approval FAILURE, and the ruleset's
-  # required-status-check evaluation then reports the stale failure and blocks the
-  # merge forever (the bug that stalled every gate-change PR). Instead, the approval is
-  # handled by rerun-ci-on-approval.yml, which re-runs the EXISTING failed run in place
-  # so gate-integrity re-evaluates with the approval present and the SAME check flips
-  # green — one check run, no stale failure. A `dismissed` review still re-runs here so
-  # revoking an approval re-locks gate-integrity (re-fails it) as before.
-  pull_request_review:
-    types: [dismissed]
+  # NO `pull_request_review` trigger. Neither `submitted` nor `dismissed` may spawn a
+  # CI run here — both leave a SECOND `CI complete` check on the commit alongside the
+  # existing one, and the ruleset's required-status-check evaluation then reports the
+  # stale/cancelled run's failure and blocks the merge forever (the bug that stalled
+  # every gate-change PR).
+  #   * `submitted` (an approval) is handled by rerun-ci-on-approval.yml, which re-runs
+  #     the EXISTING failed run in place so gate-integrity re-evaluates with the approval
+  #     present and the SAME check flips green — one check run, no stale failure.
+  #   * `dismissed` is intentionally NOT handled: a push that revokes an approval already
+  #     fires `synchronize` (which re-runs CI), and that `dismissed` event racing the
+  #     `synchronize` run under this workflow's cancel-in-progress is exactly what left a
+  #     cancelled, permanently-failing duplicate `CI complete` check. Re-failing
+  #     gate-integrity on a dismissal is redundant anyway: a revoked approval sets
+  #     reviewDecision=REVIEW_REQUIRED, which blocks the merge on its own.
 
 # Restrict GITHUB_TOKEN to read-only by default; override per-job when more is needed.
 permissions:

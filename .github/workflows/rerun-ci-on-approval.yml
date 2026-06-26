@@ -103,34 +103,43 @@ jobs:
             if [ "${real:-1}" -gt 0 ]; then
               echo "PR #$PR has $real real failure(s) beyond gate-integrity — not re-running."; exit 0
             fi
-            run_id="$WORKFLOW_RUN_ID"
+            run_ids="$WORKFLOW_RUN_ID"
           else
-            # Owner approval. Find the latest "CI complete" run for this head commit.
-            run_id=$(gh run list --repo "$REPO" --workflow ci-complete.yml \
-                       --branch "$HEAD_REF" --limit 10 \
-                       --json databaseId,headSha \
-                       --jq "[.[] | select(.headSha==\"$HEAD_SHA\")] | sort_by(.databaseId) | last | .databaseId // empty")
-            if [ -z "${run_id:-}" ]; then
+            # Owner approval. Collect EVERY "CI complete" run for this head commit, not
+            # just the latest: a duplicate run (e.g. one cancelled by cancel-in-progress)
+            # leaves its own failing `CI complete` check, and the ruleset rollup blocks on
+            # ANY failing same-named check. Re-running only the latest would leave the
+            # stale sibling's failure poisoning the merge. Re-run them all.
+            run_ids=$(gh run list --repo "$REPO" --workflow ci-complete.yml \
+                        --branch "$HEAD_REF" --limit 20 \
+                        --json databaseId,headSha \
+                        --jq "[.[] | select(.headSha==\"$HEAD_SHA\")] | sort_by(.databaseId) | .[].databaseId")
+            if [ -z "${run_ids:-}" ]; then
               echo "No 'CI complete' run found for $HEAD_SHA — nothing to re-run."; exit 0
             fi
           fi
 
-          # Wait for the run to finish — an approval that lands mid-CI must re-run the run
-          # only once it's completed (gh run rerun can't act on an in-progress run). For
-          # an in-progress run `gh run view --jq '.conclusion'` prints an EMPTY string
-          # (not "null"); poll until status is "completed".
-          for _ in $(seq 1 60); do   # up to ~20 min (60 × 20s)
-            status=$(gh run view "$run_id" --repo "$REPO" --json status --jq '.status')
-            [ "$status" = "completed" ] && break
-            echo "CI run $run_id is '$status' — waiting for it to finish before re-running."
-            sleep 20
-          done
+          for run_id in $run_ids; do
+            # Wait for the run to finish — an approval that lands mid-CI must re-run the run
+            # only once it's completed (gh run rerun can't act on an in-progress run). For
+            # an in-progress run `gh run view --jq '.conclusion'` prints an EMPTY string
+            # (not "null"); poll until status is "completed".
+            for _ in $(seq 1 60); do   # up to ~20 min (60 × 20s)
+              status=$(gh run view "$run_id" --repo "$REPO" --json status --jq '.status')
+              [ "$status" = "completed" ] && break
+              echo "CI run $run_id is '$status' — waiting for it to finish before re-running."
+              sleep 20
+            done
 
-          concl=$(gh run view "$run_id" --repo "$REPO" --json conclusion --jq '.conclusion')
-          if [ "$concl" = "failure" ]; then
-            echo "Re-running CI run $run_id — gate-integrity re-evaluates with the approval now present."
-            gh run rerun "$run_id" --failed --repo "$REPO" \
-              || echo "Re-run skipped — the run is already re-running (a racing trigger got there first)."
-          else
-            echo "CI run $run_id concluded '$concl' — no re-run needed (automerge handles a passing run)."
-          fi
+            concl=$(gh run view "$run_id" --repo "$REPO" --json conclusion --jq '.conclusion')
+            case "$concl" in
+              failure|cancelled|timed_out)
+                echo "Re-running CI run $run_id ($concl) — gate-integrity re-evaluates with the approval now present."
+                gh run rerun "$run_id" --failed --repo "$REPO" \
+                  || echo "Re-run skipped for $run_id (already re-running, or no re-runnable jobs)."
+                ;;
+              *)
+                echo "CI run $run_id concluded '$concl' — no re-run needed."
+                ;;
+            esac
+          done
