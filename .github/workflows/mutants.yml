@@ -32,7 +32,7 @@ jobs:
     name: cargo-mutants (core)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Pinned to match rust-toolchain.toml — bump both together.
       - name: Install Rust

@@ -61,7 +61,7 @@ jobs:
       desktop: ${{ steps.filter.outputs.desktop }}
       any_code: ${{ steps.filter.outputs.any_code }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # paths-filter resolves changed paths from PR context; it only applies on
       # pull_request events. On pull_request_review the step is skipped and the
       # outputs are empty (falsey) — every expensive job then skips (each also
@@ -95,7 +95,7 @@ jobs:
       pull-requests: write
     if: needs.changes.outputs.any_code == 'true' || github.event.action == 'labeled' || github.event.action == 'unlabeled' || github.event_name == 'pull_request_review'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
@@ -201,7 +201,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -218,7 +218,7 @@ jobs:
     runs-on: windows-latest
     if: needs.changes.outputs.rust == 'true' && github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Pinned to match rust-toolchain.toml — bump both together.
       - name: Install Rust (rustfmt + clippy)
@@ -261,7 +261,7 @@ jobs:
     runs-on: windows-latest
     if: needs.changes.outputs.rust == 'true' && github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust (+ llvm-tools)
         uses: dtolnay/rust-toolchain@1.96.0
@@ -320,7 +320,7 @@ jobs:
       run:
         working-directory: ui
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Node 22
         uses: actions/setup-node@v6
@@ -393,7 +393,7 @@ jobs:
     runs-on: windows-latest
     if: needs.changes.outputs.desktop == 'true' && github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust (clippy)
         uses: dtolnay/rust-toolchain@1.96.0
