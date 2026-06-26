@@ -88,7 +88,12 @@ jobs:
                 echo "Approved major PR #$PR (100% compat score)."
               else
                 # Route into the tier+1 agent-review pipeline (see agent-review.yml).
-                gh pr edit "$PR" --add-label agent-review --add-label complexity:sonnet
+                # Use the REST labels endpoint, NOT `gh pr edit --add-label`: the latter
+                # runs a GraphQL query whose reviewer/team fields require `read:org`, which
+                # the classic AUTOMERGE_PAT (repo scope only) lacks — it errors out. REST
+                # label add needs only repo scope.
+                gh api -X POST "repos/$GH_REPO/issues/$PR/labels" \
+                  -f 'labels[]=agent-review' -f 'labels[]=complexity:sonnet'
                 echo "Routed major PR #$PR to agent review (compat=${COMPAT:-unknown}%)."
               fi
               ;;
@@ -163,7 +168,10 @@ jobs:
                   # bypass used by the triage job is unavailable here. Majors always go
                   # to agent review from the backfill; the triage job handles compat-aware
                   # routing for newly-opened PRs.
-                  if gh pr edit "$pr" --add-label agent-review --add-label complexity:sonnet; then
+                  # REST label add (not `gh pr edit --add-label`): see the triage job —
+                  # the GraphQL path needs read:org, which AUTOMERGE_PAT lacks.
+                  if gh api -X POST "repos/$GH_REPO/issues/$pr/labels" \
+                       -f 'labels[]=agent-review' -f 'labels[]=complexity:sonnet'; then
                     echo "Routed major PR #$pr to agent review."
                     # agent-review.yml only triggers on workflow_run; for pre-existing PRs
                     # whose CI already finished, dispatch it directly so it isn't missed.
