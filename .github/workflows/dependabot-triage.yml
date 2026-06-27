@@ -51,7 +51,7 @@ jobs:
     steps:
       - name: Read the dependency update metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
         with:
           # The PR is in this repo (Dependabot branches are not forks), so the default
           # token can read the PR. No alert lookup is needed.
