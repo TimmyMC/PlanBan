@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Returns the single highest-priority unrefined issue (with body) as JSON.
+# Missing priority sorts as "medium"; ties break oldest-first.
 gh issue list --state open \
   --label "status:unrefined" \
   --json number,title,labels,body,createdAt \
