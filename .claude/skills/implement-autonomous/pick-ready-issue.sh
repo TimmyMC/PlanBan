@@ -27,8 +27,12 @@ complexity_of() {
 ARG="${1:-}"
 if [ -n "$ARG" ]; then
   # Targeted: hard-verify the named issue against every rule. Any failure aborts.
-  read -r login names < <(gh issue view "$ARG" --json author,labels \
-    --jq '"\(.author.login) \([.labels[].name] | join(","))"')
+  # Fetch first so a missing issue / API error reports itself rather than being
+  # misread downstream as "author lacks write access".
+  view=$(gh issue view "$ARG" --json author,labels \
+    --jq '"\(.author.login) \([.labels[].name] | join(","))"') \
+    || { echo "REJECTED #$ARG: cannot read issue (no such issue, or gh/API error)." >&2; exit 1; }
+  read -r login names <<< "$view"
   is_trusted "$login" || { echo "REJECTED #$ARG: author @$login lacks write access." >&2; exit 1; }
   case ",$names," in *",status:ready,"*) : ;; *) echo "REJECTED #$ARG: not status:ready." >&2; exit 1;; esac
   case ",$names," in *",status:in-progress,"*) echo "REJECTED #$ARG: already in progress." >&2; exit 1;; esac
