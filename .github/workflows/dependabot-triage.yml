@@ -1,20 +1,23 @@
 name: Dependabot triage
 
 # Risk-tier Dependabot PRs so the strict trunk ruleset (requires 1 approving review,
-# no bypass) stops stranding them:
-#   * patch / minor bump → low risk → auto-approve, satisfying the review requirement.
-#     `automerge.yml` already treats Dependabot as eligible-on-green, so it then merges
-#     with no human (once the PR is current — staleness is the auto-update sweep's job).
-#   * major bump, 100% compatibility score → GitHub's aggregate CI data shows no CI
-#     failures for this version jump across all repos that received it → auto-approve
-#     like patch/minor. Note: the score is a ratio, not a sample-size-bounded guarantee;
-#     a niche package updated in one repo that passed also scores 100%.
-#   * major bump, <100% compatibility score → higher risk → route into the tier+1
-#     agent-review path by labelling `agent-review` + `complexity:haiku`. `agent-review.yml`
-#     then reviews as the installed claude[bot] App on CI-complete and, on pass, approves →
-#     auto-merges; on issues it requests changes for a human. `complexity:haiku` (not
-#     `:sonnet`) puts the reviewer at the SONNET tier, not Opus: a dependency diff is a
-#     version-pin change, well within Sonnet's reach — Opus on it is wasted tokens.
+# no bypass) stops stranding them.  The sole gate for auto-approval is the compatibility
+# score Dependabot reports — NOT the semver bump level alone.  semver compliance is a
+# convention, not a guarantee: a "patch" release can contain breaking changes, so patch/
+# minor bumps are not inherently safe.  The compat score (GitHub's aggregate CI data
+# across all repos that received this exact version jump) is the observable signal we use:
+#
+#   * 100% compatibility score (any bump level) → no known CI failures for this jump →
+#     auto-approve, satisfying the review requirement. `automerge.yml` then merges once
+#     CI is green. Note: the score is a ratio, not a sample-size-bounded guarantee; a
+#     niche package updated in one repo that passed also scores 100% — but it's the best
+#     available signal, and the pre-merge CI run is a further backstop.
+#   * <100% compatibility score (any bump level) → known breakage risk → route into the
+#     tier+1 agent-review path by labelling `agent-review` + `complexity:haiku`.
+#     `agent-review.yml` then reviews as the installed claude[bot] App on CI-complete
+#     and, on pass, approves → auto-merges; on issues it requests changes for a human.
+#     `complexity:haiku` (not `:sonnet`) puts the reviewer at the SONNET tier, not Opus:
+#     a dependency diff is a version-pin change, well within Sonnet's reach.
 #
 # `pull_request_target`, not `pull_request`: a Dependabot PR's `pull_request` run executes
 # in GitHub's secret-isolated, read-only context, so it can't approve or label. The
@@ -74,21 +77,19 @@ jobs:
           echo "PR #$PR update-type: ${UPDATE_TYPE:-<none>}"
 
           case "$UPDATE_TYPE" in
-            version-update:semver-patch|version-update:semver-minor)
-              # Approve so the ruleset's 1-review requirement is met; automerge.yml lands
-              # it on green. (Re-runs on `synchronize`, so a rebase that dismisses the
-              # stale approval is followed by a fresh one.)
-              gh pr review "$PR" --approve \
-                --body "Auto-approved: ${UPDATE_TYPE#version-update:semver-} dependency bump. Merges once CI is green; a major bump would instead be routed to agent review."
-              echo "Approved patch/minor PR #$PR."
-              ;;
-            version-update:semver-major)
+            version-update:semver-patch|version-update:semver-minor|version-update:semver-major)
+              BUMP="${UPDATE_TYPE#version-update:semver-}"
               if [ "${COMPAT:-0}" = "100" ]; then
-                # 100% compatibility across GitHub → no known breakage, safe to auto-approve.
+                # 100% compatibility across GitHub → no known CI failures for this jump.
+                # Approve so the ruleset's 1-review requirement is met; automerge.yml lands
+                # it on green. (Re-runs on `synchronize`, so a rebase that dismisses the
+                # stale approval is followed by a fresh one.)
                 gh pr review "$PR" --approve \
-                  --body "Auto-approved: major bump with 100% compatibility score — zero CI failures for this version jump across GitHub. A <100% score would instead route to agent review."
-                echo "Approved major PR #$PR (100% compat score)."
+                  --body "Auto-approved: ${BUMP} bump with 100% compatibility score — zero CI failures for this version jump across GitHub. A <100% score routes to agent review regardless of semver level."
+                echo "Approved ${BUMP} PR #$PR (100% compat score)."
               else
+                # <100% compat → known breakage risk, regardless of semver bump level.
+                # semver compliance is a convention, not a guarantee.
                 # Route into the tier+1 agent-review pipeline (see agent-review.yml).
                 # Use the REST labels endpoint, NOT `gh pr edit --add-label`: the latter
                 # runs a GraphQL query whose reviewer/team fields require `read:org`, which
@@ -96,7 +97,7 @@ jobs:
                 # label add needs only repo scope.
                 gh api -X POST "repos/$GH_REPO/issues/$PR/labels" \
                   -f 'labels[]=agent-review' -f 'labels[]=complexity:haiku'
-                echo "Routed major PR #$PR to agent review (compat=${COMPAT:-unknown}%)."
+                echo "Routed ${BUMP} PR #$PR to agent review (compat=${COMPAT:-unknown}%) — semver compliance not guaranteed."
               fi
               ;;
             *)
