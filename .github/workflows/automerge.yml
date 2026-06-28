@@ -19,13 +19,13 @@ name: Auto-merge
 # GITHUB_TOKEN merges — but workflow_dispatch is exempt from that guard.
 #
 # Author/approval rule:
-#   * owner PR, or patch/minor Dependabot bump → CI green is enough.
-#   * any other PR, including major Dependabot  → also needs an APPROVED review
-#     from a reviewer identity (repo var REVIEWER_LOGINS) or the owner.
-#     Major bumps with <100% compatibility score carry the `agent-review` label
-#     (added by dependabot-triage.yml), which overrides the Dependabot auto-qualify.
-#     100%-compat majors are auto-approved by triage without the label and merge like
-#     patch/minor bumps — they never reach the approval check here.
+#   * owner PR, or Dependabot bump with 100% compatibility score → CI green is enough.
+#   * any other PR, including any Dependabot bump with <100% compat → also needs an
+#     APPROVED review from a reviewer identity (repo var REVIEWER_LOGINS) or the owner.
+#     Dependabot bumps with <100% compat carry the `agent-review` label (added by
+#     dependabot-triage.yml) regardless of semver level, which overrides the Dependabot
+#     auto-qualify below. 100%-compat bumps are auto-approved by triage and merge on
+#     CI green alone — they never reach the approval check here.
 #     An agent can't self-approve (distinct identity + GitHub blocks self-approval),
 #     and an agent approval can NEVER clear a gate change — that still needs an
 #     owner review, enforced separately in ci-complete.yml's gate-integrity job.
