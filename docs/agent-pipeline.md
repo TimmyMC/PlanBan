@@ -10,9 +10,8 @@ relaxes them (Constitution §1, §9).
 ```
 issue opened ─► issue-triage adds status:unrefined ─►(hook) agent-refine (Sonnet)
    ├─ clear      → proposed complexity:<tier> + acceptance-criteria + status:refined
-   │                 └─► HUMAN reviews, applies status:ready (the go decision)
    └─ ambiguous  → questions + status:needs-decision ─► HUMAN answers ─► requeue
-status:ready ─►(local) /implement-next picks a TRUSTED-authored ready issue → claims status:in-progress
+status:refined ─►(local) /implement-next picks a TRUSTED-authored refined issue → claims status:in-progress
    └─ draft PR (agent-review, complexity:<tier>) opened as Zlyzart → CI runs
 PR ─►(hook) agent-review (installed App, reviewer = tier+1)
    ├─ pass (haiku/sonnet) → approve + mark ready → auto-merge
@@ -87,11 +86,10 @@ rides on top of these gates and can never relax them.
   gate the *refiner*; its protection is **containment, not exclusion**. *Contained*: refine holds
   only the Actions `GITHUB_TOKEN` (`contents: read` + `issues: write`; tools `Bash(gh:*),Read,Grep,
   Glob`) — ephemeral runner, no code-write, no merge, can't approve or trigger downstream workflows.
-  An injected refiner *could* shuffle labels, including self-applying `status:ready` to the
-  attacker's own issue — but as a `GITHUB_TOKEN` edit that does **not** fire `ready-author-guard`,
-  and the downstream author checks (the implementer's consume-time selector + the reconciler's
-  author re-check, both requiring write access) reject the non-collaborator author, with the
-  least-privilege/​gate floor bounding whatever slips. Worst case is issue/label noise, not code.
+  An injected refiner *could* shuffle labels, including self-applying `status:refined` to the
+  attacker's own issue — but the downstream author check (the implementer's consume-time selector +
+  the reconciler's author re-check, both requiring write access) reject the non-collaborator author,
+  with the least-privilege/gate floor bounding whatever slips. Worst case is issue/label noise, not code.
 - An injected **reviewer** could approve a PR crafted to inject it → that PR auto-merges. *Contained*:
   the code still passed every deterministic gate, and gate changes / opus PRs still require a human.
   Worst case is "fully-gate-passing malicious code merges," a bounded blast radius — not arbitrary.
@@ -126,14 +124,13 @@ a local implementer is a credential on a real machine, so a prompt-injected run 
 whole box. We accept that **only** because of **containment**, the two boundaries a hijacked run can't
 cross: (a) the implementer identity is least-privilege (Zlyzart: Write, not `OWNERS`/CODEOWNERS
 — its approvals are inert, it can't merge or clear a gate), and (b) the deterministic gates are
-unchanged. The author controls — `ready-author-guard.yml` (write-collaborator-authored AND
-admin-promoted) and the reconciler's author re-check — are **defense-in-depth, not part of that
-acceptance**: the guard is *reactive* (it strips a bad `status:ready` after the fact, so there's
-a TOCTOU window) and the `/implement-next` selector that re-checks at consume-time lives in a
-prompt, so neither can contain a hijacked run. Their value is keeping an *honest* run from being
-handed attacker-authored input. For unattended runs, run the local implementer in an **isolated
-environment** (container/VM/dedicated OS user), never your daily login — Zlyzart bounds the
-*GitHub* authority but not the *machine*.
+unchanged. The author re-check (the implementer's consume-time selector + the reconciler's
+author re-check, both requiring write access) is **defense-in-depth, not part of that
+acceptance**: the `/implement-next` selector that checks at consume-time lives in a prompt, so it
+can't contain a hijacked run. Its value is keeping an *honest* run from being handed attacker-authored
+input. For unattended runs, run the local implementer in an **isolated environment**
+(container/VM/dedicated OS user), never your daily login — Zlyzart bounds the *GitHub* authority
+but not the *machine*.
 
 1. **Identities** — install the Claude **GitHub App** on the repo (e.g. via `/install-github-app`)
    with **Pull requests: Read & Write** so it can approve. Run interactive/local Claude Code authed
@@ -151,21 +148,16 @@ environment** (container/VM/dedicated OS user), never your daily login — Zlyza
    `ci-complete.yml` (gate-integrity) and `label-guard.yml`, default `TimmyMC`. Update if owners
    change.
 
-The **author allowlist needs no config**: `ready-author-guard.yml` only lets an issue hold
-`status:ready` when it is **authored by a write collaborator** **and** was **promoted to ready
-by a repo admin** (the human go-decision) — both read live from the collaborator-permission API
-(no hardcoded list; manage trust via Settings → Collaborators). Otherwise it strips
-`status:ready` → `status:needs-decision`. The admin-promoter check stops a hijacked bot (itself a
-write collaborator) from self-authoring + self-promoting an issue. `/implement-next` likewise
-selects only write-collaborator-authored issues and re-queues failures to `status:deferred`
-(never `status:ready`) so the reconciler re-promotes.
+The **author allowlist needs no config**: `/implement-next` selects only write-collaborator-authored
+issues (checked live from the collaborator-permission API — no hardcoded list; manage trust via
+Settings → Collaborators) and re-queues failures to `status:deferred` (never `status:refined`)
+so the reconciler re-promotes.
 
 ## Labels
 
-Lifecycle: `status:unrefined → status:refined → (human) status:ready → status:in-progress →
-(PR) → merged`, with `status:needs-decision` (blocked on a human) and `status:deferred` (retry)
-as off-ramps. The refiner only ever reaches `status:refined`; a human applies `status:ready`,
-which is the gate between refinement and implementation. Routing:
+Lifecycle: `status:unrefined → status:refined → status:in-progress → (PR) → merged`, with
+`status:needs-decision` (blocked on a human) and `status:deferred` (retry) as off-ramps.
+The refiner produces `status:refined`; `/implement-next` picks it up automatically. Routing:
 `complexity:{haiku,sonnet,opus}`, `agent-review`, `review:{passed,changes-requested}`. Holds:
 `do-not-merge` (human stop). The taxonomy is version-controlled in `.github/labels.yml` and synced
 by `label-sync.yml`.
@@ -183,7 +175,6 @@ by `label-sync.yml`.
 ## Rolling out
 
 Enable in stages, watching the `agents-global` runs: flip `AGENTS_ENABLED` after the secrets/vars
-are set; soak on `complexity:haiku` issues first (let a couple refine to `status:refined`, then
-*you* apply `status:ready` to send them through), then let sonnet and opus issues through. Each
-agent workflow also has a `workflow_dispatch` for manual, targeted
-runs while you build confidence.
+are set; soak on `complexity:haiku` issues first (let a couple refine to `status:refined` and
+watch `/implement-next` pick them up automatically), then let sonnet and opus issues through. Each
+agent workflow also has a `workflow_dispatch` for manual, targeted runs while you build confidence.
