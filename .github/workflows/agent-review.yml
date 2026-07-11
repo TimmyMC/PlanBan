@@ -180,7 +180,7 @@ jobs:
           # PreToolUse hook permits THIS session to `gh pr review` (its job).
           # The hook still blocks reviews/merges from local + interactive agents.
           CLABBY_REVIEW_CONTEXT: agent-review
-        uses: anthropics/claude-code-action@v1.0.153
+        uses: anthropics/claude-code-action@v1.0.165
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Reviewing major Dependabot bumps is this job's purpose, but the action blocks
