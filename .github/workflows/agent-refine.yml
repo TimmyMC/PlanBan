@@ -3,10 +3,8 @@ name: Agent · refine
 # Stage 1 of the tiered agent pipeline. Turns a raw `status:unrefined` issue into an
 # actionable spec: acceptance criteria + a *proposed* `complexity:<tier>`, then
 # `status:refined` — OR, when ambiguous, posts clarifying questions and
-# `status:needs-decision`. It NEVER marks an issue `status:ready`: deciding an issue
-# is ready to build is a human's call (Constitution §1). A human reviews the proposal
-# and applies `status:ready`, which the local /implement-next routine acts on. So the
-# pipeline cannot flow from raw issue to code without a human go-ahead in the middle.
+# `status:needs-decision`. Once refined, the local /implement-next routine picks it
+# up automatically.
 #
 # Triggered when `status:unrefined` is applied to an issue (issue-triage.yml adds
 # it on open); the reconciler also re-dispatches this for any lingering unrefined
@@ -64,7 +62,7 @@ jobs:
           # Only refine issues that are unrefined or have no status yet.
           labels=$(gh issue view "$n" --json labels --jq '[.labels[].name] | join(",")')
           case ",$labels," in
-            *",status:refined,"*|*",status:ready,"*|*",status:in-progress,"*|*",status:needs-decision,"*)
+            *",status:refined,"*|*",status:in-progress,"*|*",status:needs-decision,"*)
               echo "Issue #$n already past refinement ($labels) — skipping."
               echo "target=" >> "$GITHUB_OUTPUT"; exit 0 ;;
           esac
@@ -106,11 +104,9 @@ jobs:
               - Add exactly one *proposed* `complexity:<haiku|sonnet|opus>` label estimating effort:
                 haiku = small/local, sonnet = moderate, opus = large or subtle.
               - Post a comment with a short "## Acceptance criteria" checklist (what the
-                implementation and review will be judged against) and a one-line note that a
-                human should apply `status:ready` to approve implementation (and may adjust the
-                proposed complexity first).
+                implementation and review will be judged against). Optionally note that the
+                proposed complexity label can be adjusted before implementation picks it up.
               - Add `status:refined`; remove `status:unrefined`.
-              - Do NOT add `status:ready` — that is the human's go decision, not yours.
 
             If NO — it's ambiguous or under-specified:
               - Post a comment with a SHORT numbered list of the specific questions a human
