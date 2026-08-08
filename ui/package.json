@@ -26,8 +26,8 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@biomejs/biome": "2.5.6",
-    "@playwright/test": "^1.62.0",
+    "@biomejs/biome": "2.5.7",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^7.0.0",
@@ -39,10 +39,10 @@
     "@vitest/coverage-v8": "^3.2.0",
     "jsdom": "^29.1.1",
     "monocart-coverage-reports": "^2.12.12",
-    "postcss": "^8.5.25",
+    "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5",
+    "vite": "^8.2.0",
     "vitest": "^3.2.0"
   }
 }
