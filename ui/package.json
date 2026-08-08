@@ -37,7 +37,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "@vitest/coverage-v8": "^3.2.0",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "monocart-coverage-reports": "^2.12.12",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
