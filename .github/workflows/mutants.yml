@@ -36,7 +36,7 @@ jobs:
 
       # Pinned to match rust-toolchain.toml — bump both together.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.96.0
+        uses: dtolnay/rust-toolchain@1.100.0
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -44,7 +44,7 @@ jobs:
       # Pinned for week-over-week reproducibility (mutation operators change between
       # releases). Bump deliberately alongside reviewing any resulting churn.
       - name: Install cargo-mutants
-        uses: taiki-e/install-action@v2.82.1
+        uses: taiki-e/install-action@v2.85.1
         with:
           tool: cargo-mutants@27.1.0
 
